@@ -8,6 +8,8 @@
 #include <openssl/obj_mac.h>
 
 #include "key.h"
+// REGALIAS
+#include "bignum.h"
 
 // Generate a private key from just the secret parameter
 int EC_KEY_regenerate_key(EC_KEY *eckey, BIGNUM *priv_key)
@@ -204,6 +206,32 @@ bool CKey::SetPrivKey(const CPrivKey& vchPrivKey)
     pkey = NULL;
     Reset();
     return false;
+}
+
+// REGALIAS
+bool CKey::SetSecretByNumber(uint256 num, bool fCompressed)
+{
+    CBigNum N(num);
+
+    EC_KEY_free(pkey);
+    pkey = EC_KEY_new_by_curve_name(NID_secp256k1);
+    if (pkey == NULL)
+        throw key_error("CKey::SetSecret() : EC_KEY_new_by_curve_name failed");
+    BIGNUM *bn = &N;
+    if (!EC_KEY_regenerate_key(pkey,bn))
+    {
+        BN_clear_free(bn);
+        throw key_error("CKey::SetSecret() : EC_KEY_regenerate_key failed");
+    }
+    // BN_clear_free(bn);
+    fSet = true;
+    if (fCompressed || fCompressedPubKey)
+        SetCompressedPubKey();
+    return true;
+}
+bool CKey::SetSecretByLabel(const std::string& str, bool fCompressed)
+{
+    return this->SetSecretByNumber(Hash(str.begin(),str.end()),fCompressed);
 }
 
 bool CKey::SetSecret(const CSecret& vchSecret, bool fCompressed)

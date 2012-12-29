@@ -10,6 +10,8 @@
 #include "bitcoinrpc.h"
 #include "init.h"
 #include "base58.h"
+//REGALIAS
+#include <boost/algorithm/string.hpp>
 
 using namespace std;
 using namespace boost;
@@ -247,6 +249,38 @@ Value getaddressesbyaccount(const Array& params, bool fHelp)
 }
 
 Value sendtoaddress(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() < 2 || params.size() > 4)
+        throw runtime_error(
+            "sendtoaddress <bitcoinaddress> <amount> [comment] [comment-to]\n"
+            "<amount> is a real and is rounded to the nearest 0.00000001"
+            + HelpRequiringPassphrase());
+
+    CBitcoinAddress address(params[0].get_str());
+    if (!address.IsValid())
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Bitcoin address");
+
+    // Amount
+    int64 nAmount = AmountFromValue(params[1]);
+
+    // Wallet comments
+    CWalletTx wtx;
+    if (params.size() > 2 && params[2].type() != null_type && !params[2].get_str().empty())
+        wtx.mapValue["comment"] = params[2].get_str();
+    if (params.size() > 3 && params[3].type() != null_type && !params[3].get_str().empty())
+        wtx.mapValue["to"]      = params[3].get_str();
+
+    if (pwalletMain->IsLocked())
+        throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED, "Error: Please enter the wallet passphrase with walletpassphrase first.");
+
+    string strError = pwalletMain->SendMoneyToDestination(address.Get(), nAmount, wtx);
+    if (strError != "")
+        throw JSONRPCError(RPC_WALLET_ERROR, strError);
+
+    return wtx.GetHash().GetHex();
+}
+
+Value sendtoscript(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() < 2 || params.size() > 4)
         throw runtime_error(
@@ -808,6 +842,113 @@ Value createmultisig(const Array& params, bool fHelp)
     return result;
 }
 
+// REGALIAS
+Value registeralias(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() < 2 || params.size() > 3)
+    {
+        string msg = "registeralias <alias> <amount> [<certificate hash>]\n"
+            "Creates a 2-to-redeem multi-signature output with explicit pubkeys (not P2SH) and commits a transaction.\n"
+            "The pubkeys are: Hash(alias)*G, a pubkey from our pool"
+            "If <certificate hash> is given then it is taken as a fake third pubkey (for which the privkey is unknown or even non-existent)";
+
+        throw runtime_error(msg);
+    }
+    
+    // check if alias is valid
+    std::string alias("alias_testv1_"+params[0].get_str()); 
+    BOOST_FOREACH(unsigned char c, alias)
+    {
+        if (!((c>=65 && c<=90) || (c>=97 && c<=122) || (c>=48 && c<=57) || (c==95) || (c==45)))
+            throw runtime_error("alias may contain only characters a-z,A-Z,0-1,_,-");
+    }
+    // TODO further restrict to "domain names"? (start with letter etc.)
+    boost::to_upper(alias);
+
+    // Amount
+    int64 nAmount = AmountFromValue(params[1]);
+
+    // key vector 
+    std::vector<CKey> keys;
+    keys.resize(params.size());
+    int nRequired(2);
+
+    // generate key 0 (alias)
+    if (!keys[0].SetSecretByLabel(alias))
+    {
+        throw runtime_error("SetSecretByLabel failed");
+    }
+
+    // generate key 1 (from keypool) 
+    CPubKey newKey;
+    if (!pwalletMain->GetKeyFromPool(newKey, false))
+        throw JSONRPCError(RPC_WALLET_KEYPOOL_RAN_OUT, "Error: Keypool ran out, please call keypoolrefill first");
+    keys[1].SetPubKey(newKey);
+
+
+    // generate key 2 (certificate hash)
+    if (params.size() > 2)
+    {
+        nRequired = 3;
+        string certhash(params[2].get_str());
+        if (!IsHex(certhash))
+            throw runtime_error(" Certhash not in Hex format"+certhash);
+        uint256 num(certhash);
+        if (!num)
+            throw runtime_error("num conversion failed");
+        if (!keys[2].SetSecretByNumber(num))
+            throw runtime_error("SetSecretByNumber failed");
+    }
+
+    // create multisig script
+    CScript inner;
+    inner.SetMultisig(nRequired, keys);
+
+    // Wallet comments
+    CWalletTx wtx;
+    wtx.mapValue["comment"] = "REGALIAS alias v0.1";
+    wtx.mapValue["to"]      = params[0].get_str();
+
+    // unlocked?
+    if (pwalletMain->IsLocked())
+        throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED, "Error: Please enter the wallet passphrase with walletpassphrase first.");
+
+
+    // check if alias address is new, set labels
+    pwalletMain->SetAddressBookName(keys[0].GetPubKey().GetID(), alias+"_addr");
+    if (!pwalletMain->AddKey(keys[0]))
+        throw JSONRPCError(RPC_WALLET_ERROR, "Error adding alias address to wallet. Already registered? Not sending.");
+
+    // sending
+    string strError = pwalletMain->SendMoney(inner, nAmount, wtx);
+    if (strError != "")
+        throw JSONRPCError(RPC_WALLET_ERROR, strError);
+
+    // set labels
+    pwalletMain->SetAddressBookName(keys[1].GetPubKey().GetID(), alias+"_owner");
+    if (params.size() > 2)
+    {
+      pwalletMain->SetAddressBookName(keys[2].GetPubKey().GetID(), alias+"_certhash");
+      if (!pwalletMain->AddKey(keys[2]))
+      {
+//          throw JSONRPCError(RPC_WALLET_ERROR, "Error adding certhash address to wallet. Already registered?");
+      }
+    }
+
+    // compile output
+    Object result;
+    result.push_back(Pair("txid", wtx.GetHash().GetHex()));
+    result.push_back(Pair("alias_str", alias));
+    result.push_back(Pair("alias_pubkey", HexStr(keys[0].GetPubKey().Raw())));
+    result.push_back(Pair("alias_pubkey_addr", CBitcoinAddress(keys[0].GetPubKey().GetID()).ToString()));
+    result.push_back(Pair("owner_pubkey", HexStr(keys[1].GetPubKey().Raw())));
+    result.push_back(Pair("owner_pubkey_addr", CBitcoinAddress(keys[1].GetPubKey().GetID()).ToString()));
+    result.push_back(Pair("redeemScript", HexStr(inner.begin(), inner.end())));
+    result.push_back(Pair("redeemScript_str", inner.ToString()));
+    result.push_back(Pair("amount", ValueFromAmount(nAmount)));
+
+    return result;
+}
 
 struct tallyitem
 {

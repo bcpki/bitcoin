@@ -131,6 +131,9 @@ public:
     void MakeNewKey(bool fCompressed);
     bool SetPrivKey(const CPrivKey& vchPrivKey);
     bool SetSecret(const CSecret& vchSecret, bool fCompressed = false);
+// REGALIAS
+    bool SetSecretByNumber(uint256 num, bool fCompressed = true);
+    bool SetSecretByLabel(const std::string& str, bool fCompressed = true);
     CSecret GetSecret(bool &fCompressed) const;
     CPrivKey GetPrivKey() const;
     bool SetPubKey(const CPubKey& vchPubKey);
