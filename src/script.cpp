@@ -1636,6 +1636,25 @@ bool ExtractDestinations(const CScript& scriptPubKey, txnouttype& typeRet, vecto
     return true;
 }
 
+bool ExtractRegistration(const CScript& scriptPubKey, CPubKey& pubkeySearch, CPubkey& owner, CPubkey& certhash, int& nRequiredRet )
+{
+    typeRet = TX_NONSTANDARD;
+    vector<valtype> vSolutions;
+    if (!Solver(scriptPubKey, typeRet, vSolutions))
+        return false;
+
+    if ((typeRet == TX_MULTISIG) && (CPubKey(vSolutions[1]) == pubkeySearch))
+    {
+        nRequiredRet = vSolutions.front()[0];
+	owner = CPubKey(vSolutions[2]);
+	if (vSolutions.size() > 2)
+	    certhash = CPubKey(vSolutions[3]);
+	return true;
+    }
+
+    return false;
+}
+
 bool VerifyScript(const CScript& scriptSig, const CScript& scriptPubKey, const CTransaction& txTo, unsigned int nIn,
                   unsigned int flags, int nHashType)
 {

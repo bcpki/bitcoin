@@ -220,7 +220,7 @@ bool CKey::SetSecretByNumber(uint256 num, bool fCompressed)
     BIGNUM *bn = &N;
     if (!EC_KEY_regenerate_key(pkey,bn))
     {
-        BN_clear_free(bn);
+        //BN_clear_free(bn);
         throw key_error("CKey::SetSecret() : EC_KEY_regenerate_key failed");
     }
     // BN_clear_free(bn);

@@ -280,38 +280,6 @@ Value sendtoaddress(const Array& params, bool fHelp)
     return wtx.GetHash().GetHex();
 }
 
-Value sendtoscript(const Array& params, bool fHelp)
-{
-    if (fHelp || params.size() < 2 || params.size() > 4)
-        throw runtime_error(
-            "sendtoaddress <bitcoinaddress> <amount> [comment] [comment-to]\n"
-            "<amount> is a real and is rounded to the nearest 0.00000001"
-            + HelpRequiringPassphrase());
-
-    CBitcoinAddress address(params[0].get_str());
-    if (!address.IsValid())
-        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Bitcoin address");
-
-    // Amount
-    int64 nAmount = AmountFromValue(params[1]);
-
-    // Wallet comments
-    CWalletTx wtx;
-    if (params.size() > 2 && params[2].type() != null_type && !params[2].get_str().empty())
-        wtx.mapValue["comment"] = params[2].get_str();
-    if (params.size() > 3 && params[3].type() != null_type && !params[3].get_str().empty())
-        wtx.mapValue["to"]      = params[3].get_str();
-
-    if (pwalletMain->IsLocked())
-        throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED, "Error: Please enter the wallet passphrase with walletpassphrase first.");
-
-    string strError = pwalletMain->SendMoneyToDestination(address.Get(), nAmount, wtx);
-    if (strError != "")
-        throw JSONRPCError(RPC_WALLET_ERROR, strError);
-
-    return wtx.GetHash().GetHex();
-}
-
 Value listaddressgroupings(const Array& params, bool fHelp)
 {
     if (fHelp)
@@ -854,13 +822,16 @@ Value registeralias(const Array& params, bool fHelp)
 
         throw runtime_error(msg);
     }
+    // testnet only
+    if (!fTestNet)
+      throw runtime_error("RPC registeralias: disabled on mainnet");
     
     // check if alias is valid
     std::string alias("alias_testv1_"+params[0].get_str()); 
     BOOST_FOREACH(unsigned char c, alias)
     {
         if (!((c>=65 && c<=90) || (c>=97 && c<=122) || (c>=48 && c<=57) || (c==95) || (c==45)))
-            throw runtime_error("alias may contain only characters a-z,A-Z,0-1,_,-");
+            throw runtime_error("RPC registeralias: alias may contain only characters a-z,A-Z,0-1,_,-");
     }
     // TODO further restrict to "domain names"? (start with letter etc.)
     boost::to_upper(alias);
@@ -876,10 +847,10 @@ Value registeralias(const Array& params, bool fHelp)
     // generate key 0 (alias)
     if (!keys[0].SetSecretByLabel(alias))
     {
-        throw runtime_error("SetSecretByLabel failed");
+        throw runtime_error("RPC registeralias: SetSecretByLabel failed");
     }
 
-    // generate key 1 (from keypool) 
+    // generate key 1 (taken from keypool) 
     CPubKey newKey;
     if (!pwalletMain->GetKeyFromPool(newKey, false))
         throw JSONRPCError(RPC_WALLET_KEYPOOL_RAN_OUT, "Error: Keypool ran out, please call keypoolrefill first");
@@ -892,12 +863,12 @@ Value registeralias(const Array& params, bool fHelp)
         nRequired = 3;
         string certhash(params[2].get_str());
         if (!IsHex(certhash))
-            throw runtime_error(" Certhash not in Hex format"+certhash);
+            throw runtime_error("RPC registeralias: certhash not in Hex format"+certhash);
         uint256 num(certhash);
         if (!num)
-            throw runtime_error("num conversion failed");
+            throw runtime_error("RPC registeralias: num conversion failed");
         if (!keys[2].SetSecretByNumber(num))
-            throw runtime_error("SetSecretByNumber failed");
+            throw runtime_error("RPC registeralias: SetSecretByNumber failed");
     }
 
     // create multisig script

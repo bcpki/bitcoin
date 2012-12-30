@@ -1,6 +1,6 @@
 cd src
 make -f makefile.unix
-./bitcoind stop ; sleep 1 ; ./bitcoind -testnet -daemon
-protoc cert.proto
+./bitcoind -testnet stop ; sleep 1 ; ./bitcoind -testnet -daemon
+protoc --python-output=. cert.proto
 ./mycert.py
 

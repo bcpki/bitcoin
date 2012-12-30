@@ -245,6 +245,71 @@ Value listunspent(const Array& params, bool fHelp)
     return results;
 }
 
+Value listregistrations(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() > 3)
+        throw runtime_error(
+            "listunspent <alias>\n"
+            "Returns array of unspent transaction outputs that contain a registration of <alias>.\n"
+            "This means that the output is TX_MULTISIG and contains the pubkey corresponding to <alias>.\n"
+            "Results are an array of Objects, each of which has:\n"
+            "{txid, vout, scriptPubKey, amount, confirmations}");
+
+    // check if alias is valid
+    std::string alias("alias_testv1_"+params[0].get_str()); 
+    BOOST_FOREACH(unsigned char c, alias)
+    {
+        if (!((c>=65 && c<=90) || (c>=97 && c<=122) || (c>=48 && c<=57) || (c==95) || (c==45)))
+            throw runtime_error("RPC listregistrations: alias may contain only characters a-z,A-Z,0-1,_,-");
+    }
+    // TODO further restrict to "domain names"? (start with letter etc.)
+    boost::to_upper(alias);
+
+    // generate key corresponding to alias
+    if (!CKey key.SetSecretByLabel(alias))
+    {
+        throw runtime_error("RPC listregistrations: SetSecretByLabel failed");
+    }
+    CPubKey pubkeySearch = key.GetPubKey(), owner, certhash;
+    int nRequired;
+
+    Array results;
+    vector<COutput> vecOutputs;
+    pwalletMain->AvailableCoins(vecOutputs, false);
+    BOOST_FOREACH(const COutput& out, vecOutputs)
+    {
+      //        if (out.nDepth < nMinDepth || out.nDepth > nMaxDepth)
+      //     continue;
+
+        CTxDestination address;
+        if (!ExtractRegistration(out.tx->vout[out.i].scriptPubKey, pubkeySearch, owner, certhash, nRequired))
+            continue;
+    
+        int64 nValue = out.tx->vout[out.i].nValue;
+        const CScript& pk = out.tx->vout[out.i].scriptPubKey;
+        Object entry;
+        entry.push_back(Pair("txid", out.tx->GetHash().GetHex()));
+        entry.push_back(Pair("vout", out.i));
+        entry.push_back(Pair("scriptPubKey", HexStr(pk.begin(), pk.end())));
+        if (pk.IsPayToScriptHash())
+        {
+            CTxDestination address;
+            if (ExtractDestination(pk, address))
+            {
+                const CScriptID& hash = boost::get<const CScriptID&>(address);
+                CScript redeemScript;
+                if (pwalletMain->GetCScript(hash, redeemScript))
+                    entry.push_back(Pair("redeemScript", HexStr(redeemScript.begin(), redeemScript.end())));
+            }
+        }
+        entry.push_back(Pair("amount",ValueFromAmount(nValue)));
+        entry.push_back(Pair("confirmations",out.nDepth));
+        results.push_back(entry);
+    }
+
+    return results;
+}
+
 Value createrawtransaction(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() != 2)
