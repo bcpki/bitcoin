@@ -1636,9 +1636,9 @@ bool ExtractDestinations(const CScript& scriptPubKey, txnouttype& typeRet, vecto
     return true;
 }
 
-bool ExtractRegistration(const CScript& scriptPubKey, CPubKey& pubkeySearch, CPubkey& owner, CPubkey& certhash, int& nRequiredRet )
+bool ExtractRegistration(const CScript& scriptPubKey, const CPubKey& pubkeySearch, CPubKey& ownerRet, CPubKey& certhashRet, int& nRequiredRet )
 {
-    typeRet = TX_NONSTANDARD;
+    txnouttype typeRet = TX_NONSTANDARD;
     vector<valtype> vSolutions;
     if (!Solver(scriptPubKey, typeRet, vSolutions))
         return false;
@@ -1646,9 +1646,9 @@ bool ExtractRegistration(const CScript& scriptPubKey, CPubKey& pubkeySearch, CPu
     if ((typeRet == TX_MULTISIG) && (CPubKey(vSolutions[1]) == pubkeySearch))
     {
         nRequiredRet = vSolutions.front()[0];
-	owner = CPubKey(vSolutions[2]);
-	if (vSolutions.size() > 2)
-	    certhash = CPubKey(vSolutions[3]);
+	ownerRet = CPubKey(vSolutions[2]);
+	if (vSolutions.size() > 4)
+	    certhashRet = CPubKey(vSolutions[3]);
 	return true;
     }
 

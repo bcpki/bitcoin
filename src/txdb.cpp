@@ -145,6 +145,47 @@ bool CCoinsViewDB::GetStats(CCoinsStats &stats) {
     return true;
 }
 
+bool CCoinsViewDB::GetRegistrations(vector<CTxOut>& results, const string& alias) {
+    leveldb::Iterator *pcursor = db.NewIterator();
+    pcursor->SeekToFirst();
+
+    // generate pubkey corresponding to alias
+    CKey key;
+    if (!key.SetSecretByLabel(alias))
+    {
+        throw runtime_error("GetRegistrations: SetSecretByLabel failed");
+    }
+    CPubKey pubkeySearch = key.GetPubKey(), owner, certhash;
+    int nRequired;
+
+    while (pcursor->Valid()) {
+        try {
+            leveldb::Slice slKey = pcursor->key();
+            CDataStream ssKey(slKey.data(), slKey.data()+slKey.size(), SER_DISK, CLIENT_VERSION);
+            char chType;
+            ssKey >> chType;
+            if (chType == 'c' && !fRequestShutdown) {
+                leveldb::Slice slValue = pcursor->value();
+                CDataStream ssValue(slValue.data(), slValue.data()+slValue.size(), SER_DISK, CLIENT_VERSION);
+                CCoins coins;
+                ssValue >> coins;
+                uint256 txhash;
+                ssKey >> txhash;
+
+                BOOST_FOREACH(const CTxOut &out, coins.vout) {
+                    if (ExtractRegistration(out.scriptPubKey, pubkeySearch, owner, certhash, nRequired))
+ 		        results.push_back(out);
+                }
+            }
+            pcursor->Next();
+        } catch (std::exception &e) {
+            return error("%s() : deserialize error", __PRETTY_FUNCTION__);
+        }
+    }
+    delete pcursor;
+    return true;
+}
+
 bool CBlockTreeDB::LoadBlockIndexGuts()
 {
     leveldb::Iterator *pcursor = NewIterator();

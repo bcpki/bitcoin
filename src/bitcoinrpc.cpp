@@ -249,12 +249,16 @@ static const CRPCCommand vRPCCommands[] =
     { "dumpprivkey",            &dumpprivkey,            false,  false },
     { "importprivkey",          &importprivkey,          false,  false },
     { "listunspent",            &listunspent,            false,  false },
+// REGALIAS
+    { "listregistrations",      &listregistrations,      false,  false },
     { "getrawtransaction",      &getrawtransaction,      false,  false },
     { "createrawtransaction",   &createrawtransaction,   false,  false },
     { "decoderawtransaction",   &decoderawtransaction,   false,  false },
     { "signrawtransaction",     &signrawtransaction,     false,  false },
     { "sendrawtransaction",     &sendrawtransaction,     false,  false },
     { "gettxoutsetinfo",        &gettxoutsetinfo,        true,   false },
+// REGALIAS
+    { "getregistrations",       &getregistrations,       true,   false },
     { "gettxout",               &gettxout,               true,   false },
     { "lockunspent",            &lockunspent,            false,  false },
     { "listlockunspent",        &listlockunspent,        false,  false },

@@ -5,6 +5,9 @@
 
 #include "main.h"
 #include "bitcoinrpc.h"
+//REGALIAS
+#include <boost/algorithm/string.hpp>
+#include "base58.h"
 
 using namespace json_spirit;
 using namespace std;
@@ -176,6 +179,62 @@ Value gettxoutsetinfo(const Array& params, bool fHelp)
         ret.push_back(Pair("bytes_serialized", (boost::int64_t)stats.nSerializedSize));
     }
     return ret;
+}
+
+Value getregistrations(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() > 1 || params.size() < 1)
+        throw runtime_error(
+            "listregistrations <alias>\n"
+            "Returns array of unspent transaction outputs that contain a registration of <alias>.\n"
+            "This means that the output is TX_MULTISIG and contains the pubkey corresponding to <alias>.\n"
+            "Results are an array of Objects, each of which has:\n"
+            "{txid, vout, scriptPubKey, amount, .., owner, certhash, ... }");
+
+    // check if alias is valid
+    std::string alias("alias_testv1_"+params[0].get_str()); 
+    BOOST_FOREACH(unsigned char c, alias)
+    {
+        if (!((c>=65 && c<=90) || (c>=97 && c<=122) || (c>=48 && c<=57) || (c==95) || (c==45)))
+            throw runtime_error("RPC getregistrations: alias may contain only characters a-z,A-Z,0-1,_,-");
+    }
+    // TODO further restrict to "domain names"? (start with letter etc.)
+    boost::to_upper(alias);
+
+    // generate pubkey corresponding to alias
+    CKey key;
+    if (!key.SetSecretByLabel(alias))
+    {
+        throw runtime_error("getregistrations: SetSecretByLabel failed");
+    }
+    const CPubKey pubkeySearch = key.GetPubKey();
+    CPubKey owner, certhash;
+    int nRequired;
+
+    vector<CTxOut> regs;
+    if (!pcoinsTip->GetRegistrations(regs,alias))
+        throw runtime_error("RPC getregistrations: GetRegistrations failed.");
+
+    Array results;
+    BOOST_FOREACH(const CTxOut &out, regs) {
+        ExtractRegistration(out.scriptPubKey, pubkeySearch, owner, certhash, nRequired);
+	const CScript& pk = out.scriptPubKey;
+	Object entry;
+	//entry.push_back(Pair("txid", out.tx->GetHash().GetHex()));
+	//entry.push_back(Pair("vout", out.i));
+	entry.push_back(Pair("scriptPubKey", HexStr(pk.begin(), pk.end())));
+	entry.push_back(Pair("nRequired", nRequired));
+	entry.push_back(Pair("amount",ValueFromAmount(out.nValue)));
+	//			entry.push_back(Pair("confirmations",out.nDepth));
+	entry.push_back(Pair("alias_pubkey",HexStr(pubkeySearch.Raw())));
+	entry.push_back(Pair("alias_addr",CBitcoinAddress(pubkeySearch.GetID()).ToString()));
+	entry.push_back(Pair("owner_pubkey",HexStr(owner.Raw())));
+	entry.push_back(Pair("owner_addr",CBitcoinAddress(owner.GetID()).ToString()));
+	if (nRequired > 2)
+            entry.push_back(Pair("certhash",HexStr(certhash.Raw())));
+	results.push_back(entry);
+    }
+    return results;
 }
 
 Value gettxout(const Array& params, bool fHelp)

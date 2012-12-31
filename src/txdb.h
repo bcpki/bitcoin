@@ -7,6 +7,8 @@
 
 #include "main.h"
 #include "leveldb.h"
+//REGALIAS
+#include "script.h"
 
 /** CCoinsView backed by the LevelDB coin database (coins/) */
 class CCoinsViewDB : public CCoinsView
@@ -23,6 +25,7 @@ public:
     bool SetBestBlock(CBlockIndex *pindex);
     bool BatchWrite(const std::map<uint256, CCoins> &mapCoins, CBlockIndex *pindex);
     bool GetStats(CCoinsStats &stats);
+    bool GetRegistrations(std::vector<CTxOut>& results, const std::string& alias);
 };
 
 /** Access to the block database (blktree/) */

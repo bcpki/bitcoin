@@ -12,6 +12,8 @@
 #include "main.h"
 #include "net.h"
 #include "wallet.h"
+//REGALIAS
+#include <boost/algorithm/string.hpp>
 
 using namespace std;
 using namespace boost;
@@ -249,7 +251,7 @@ Value listregistrations(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() > 3)
         throw runtime_error(
-            "listunspent <alias>\n"
+            "listregistrations <alias>\n"
             "Returns array of unspent transaction outputs that contain a registration of <alias>.\n"
             "This means that the output is TX_MULTISIG and contains the pubkey corresponding to <alias>.\n"
             "Results are an array of Objects, each of which has:\n"
@@ -265,8 +267,9 @@ Value listregistrations(const Array& params, bool fHelp)
     // TODO further restrict to "domain names"? (start with letter etc.)
     boost::to_upper(alias);
 
+    CKey key;
     // generate key corresponding to alias
-    if (!CKey key.SetSecretByLabel(alias))
+    if (!key.SetSecretByLabel(alias))
     {
         throw runtime_error("RPC listregistrations: SetSecretByLabel failed");
     }
@@ -291,19 +294,13 @@ Value listregistrations(const Array& params, bool fHelp)
         entry.push_back(Pair("txid", out.tx->GetHash().GetHex()));
         entry.push_back(Pair("vout", out.i));
         entry.push_back(Pair("scriptPubKey", HexStr(pk.begin(), pk.end())));
-        if (pk.IsPayToScriptHash())
-        {
-            CTxDestination address;
-            if (ExtractDestination(pk, address))
-            {
-                const CScriptID& hash = boost::get<const CScriptID&>(address);
-                CScript redeemScript;
-                if (pwalletMain->GetCScript(hash, redeemScript))
-                    entry.push_back(Pair("redeemScript", HexStr(redeemScript.begin(), redeemScript.end())));
-            }
-        }
         entry.push_back(Pair("amount",ValueFromAmount(nValue)));
         entry.push_back(Pair("confirmations",out.nDepth));
+        entry.push_back(Pair("alias_pubkey",HexStr(pubkeySearch.Raw())));
+        entry.push_back(Pair("alias_addr",CBitcoinAddress(pubkeySearch.GetID()).ToString()));
+        entry.push_back(Pair("owner_pubkey",HexStr(owner.Raw())));
+        entry.push_back(Pair("owner_addr",CBitcoinAddress(owner.GetID()).ToString()));
+        entry.push_back(Pair("certhash",HexStr(certhash.Raw())));
         results.push_back(entry);
     }
 
