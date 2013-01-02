@@ -11,7 +11,7 @@ Cert.ecdsa_pubkeys.append('03bb0bacd9b1f73a6ef17d230e431538628f18174b0eccaaeb543
 Cert.ecdsa_pubkeys.append('02d556d37bc1491277ed00dedb8bd08b4a94097eec1cd9d9dc17eeeaaa32c25da7'.decode('hex'))
 hash=sha256(Cert.SerializeToString()).digest().encode('hex')
 
-p = Popen(['./bitcoind','-testnet','registeralias','foo','0.5',hash],stdout=PIPE)
+p = Popen(['./bitcoind','-testnet','registeralias','foo3','0.5',hash],stdout=PIPE)
 result = p.stdout.read()
 print result
 

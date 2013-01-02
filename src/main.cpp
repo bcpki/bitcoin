@@ -175,7 +175,7 @@ CBlockIndex *CCoinsView::GetBestBlock() { return NULL; }
 bool CCoinsView::SetBestBlock(CBlockIndex *pindex) { return false; }
 bool CCoinsView::BatchWrite(const std::map<uint256, CCoins> &mapCoins, CBlockIndex *pindex) { return false; }
 bool CCoinsView::GetStats(CCoinsStats &stats) { return false; }
-bool CCoinsView::GetRegistrations(vector<CTxOut>& results, const std::string& alias) { return false; }
+bool CCoinsView::GetRegistrations(vector<std::pair<uint256,CTxOut> >& results, const std::string& alias) { return false; }
 
 CCoinsViewBacked::CCoinsViewBacked(CCoinsView &viewIn) : base(&viewIn) { }
 bool CCoinsViewBacked::GetCoins(uint256 txid, CCoins &coins) { return base->GetCoins(txid, coins); }
@@ -186,7 +186,7 @@ bool CCoinsViewBacked::SetBestBlock(CBlockIndex *pindex) { return base->SetBestB
 void CCoinsViewBacked::SetBackend(CCoinsView &viewIn) { base = &viewIn; }
 bool CCoinsViewBacked::BatchWrite(const std::map<uint256, CCoins> &mapCoins, CBlockIndex *pindex) { return base->BatchWrite(mapCoins, pindex); }
 bool CCoinsViewBacked::GetStats(CCoinsStats &stats) { return base->GetStats(stats); }
-bool CCoinsViewBacked::GetRegistrations(vector<CTxOut>& results, const std::string& alias) { return base->GetRegistrations(results,alias); }
+bool CCoinsViewBacked::GetRegistrations(vector<std::pair<uint256,CTxOut> >& results, const std::string& alias) { return base->GetRegistrations(results,alias); }
 
 CCoinsViewCache::CCoinsViewCache(CCoinsView &baseIn, bool fDummy) : CCoinsViewBacked(baseIn), pindexTip(NULL) { }
 

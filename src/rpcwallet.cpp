@@ -818,7 +818,8 @@ Value registeralias(const Array& params, bool fHelp)
         string msg = "registeralias <alias> <amount> [<certificate hash>]\n"
             "Creates a 2-to-redeem multi-signature output with explicit pubkeys (not P2SH) and commits a transaction.\n"
             "The pubkeys are: Hash(alias)*G, a pubkey from our pool"
-            "If <certificate hash> is given then it is taken as a fake third pubkey (for which the privkey is unknown or even non-existent)";
+            "If <certificate hash> is given then it is taken as a fake third pubkey (for which the privkey is unknown or even non-existent)"
+            "Amount is overridden and set to 1mBTC";
 
         throw runtime_error(msg);
     }
@@ -831,13 +832,15 @@ Value registeralias(const Array& params, bool fHelp)
     BOOST_FOREACH(unsigned char c, alias)
     {
         if (!((c>=65 && c<=90) || (c>=97 && c<=122) || (c>=48 && c<=57) || (c==95) || (c==45)))
-            throw runtime_error("RPC registeralias: alias may contain only characters a-z,A-Z,0-1,_,-");
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC registeralias: alias may contain only characters a-z,A-Z,0-1,_,-");
     }
     // TODO further restrict to "domain names"? (start with letter etc.)
     boost::to_upper(alias);
 
     // Amount
     int64 nAmount = AmountFromValue(params[1]);
+    // override
+    nAmount=10000;
 
     // key vector 
     std::vector<CKey> keys;
@@ -847,7 +850,7 @@ Value registeralias(const Array& params, bool fHelp)
     // generate key 0 (alias)
     if (!keys[0].SetSecretByLabel(alias))
     {
-        throw runtime_error("RPC registeralias: SetSecretByLabel failed");
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC registeralias: SetSecretByLabel failed");
     }
 
     // generate key 1 (taken from keypool) 
@@ -863,12 +866,12 @@ Value registeralias(const Array& params, bool fHelp)
         nRequired = 3;
         string certhash(params[2].get_str());
         if (!IsHex(certhash))
-            throw runtime_error("RPC registeralias: certhash not in Hex format"+certhash);
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC registeralias: certhash not in Hex format");
         uint256 num(certhash);
         if (!num)
-            throw runtime_error("RPC registeralias: num conversion failed");
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC registeralias: num conversion failed");
         if (!keys[2].SetSecretByNumber(num))
-            throw runtime_error("RPC registeralias: SetSecretByNumber failed");
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC registeralias: SetSecretByNumber failed");
     }
 
     // create multisig script

@@ -1903,7 +1903,7 @@ public:
     virtual bool GetStats(CCoinsStats &stats);
 
     // Get registrations from the unspent transaction output set
-    virtual bool GetRegistrations(std::vector<CTxOut>& results, const std::string& alias);
+    virtual bool GetRegistrations(std::vector<std::pair<uint256,CTxOut> >& results, const std::string& alias);
 
     // As we use CCoinsViews polymorphically, have a virtual destructor
     virtual ~CCoinsView() {}
@@ -1925,7 +1925,7 @@ public:
     void SetBackend(CCoinsView &viewIn);
     bool BatchWrite(const std::map<uint256, CCoins> &mapCoins, CBlockIndex *pindex);
     bool GetStats(CCoinsStats &stats);
-    bool GetRegistrations(std::vector<CTxOut>& results, const std::string& alias);
+    bool GetRegistrations(std::vector<std::pair<uint256,CTxOut> >& results, const std::string& alias);
 };
 
 /** CCoinsView that adds a memory cache for transactions to another CCoinsView */

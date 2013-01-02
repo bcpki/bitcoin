@@ -53,4 +53,4 @@ $ ./bitcoind -testnet getregistrations foo
         "certhash" : "027e860652a243d97bafdcc4aaa948d61b6ae3ab74a3c00037f4eb89a9503a9c62"
     }
 ]
-
+(by now the 2nd one has already been spent)

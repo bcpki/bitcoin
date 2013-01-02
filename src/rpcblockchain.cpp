@@ -196,7 +196,7 @@ Value getregistrations(const Array& params, bool fHelp)
     BOOST_FOREACH(unsigned char c, alias)
     {
         if (!((c>=65 && c<=90) || (c>=97 && c<=122) || (c>=48 && c<=57) || (c==95) || (c==45)))
-            throw runtime_error("RPC getregistrations: alias may contain only characters a-z,A-Z,0-1,_,-");
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC getregistrations: alias may contain only characters a-z,A-Z,0-1,_,-");
     }
     // TODO further restrict to "domain names"? (start with letter etc.)
     boost::to_upper(alias);
@@ -211,12 +211,13 @@ Value getregistrations(const Array& params, bool fHelp)
     CPubKey owner, certhash;
     int nRequired;
 
-    vector<CTxOut> regs;
+    vector<pair<uint256, CTxOut> > regs;
     if (!pcoinsTip->GetRegistrations(regs,alias))
         throw runtime_error("RPC getregistrations: GetRegistrations failed.");
 
     Array results;
-    BOOST_FOREACH(const CTxOut &out, regs) {
+    BOOST_FOREACH(const PAIRTYPE(uint256,CTxOut)& reg, regs) {
+        CTxOut out = reg.second;
         ExtractRegistration(out.scriptPubKey, pubkeySearch, owner, certhash, nRequired);
 	const CScript& pk = out.scriptPubKey;
 	Object entry;
@@ -232,6 +233,7 @@ Value getregistrations(const Array& params, bool fHelp)
 	entry.push_back(Pair("owner_addr",CBitcoinAddress(owner.GetID()).ToString()));
 	if (nRequired > 2)
             entry.push_back(Pair("certhash",HexStr(certhash.Raw())));
+        entry.push_back(Pair("txid",reg.first.ToString()));
 	results.push_back(entry);
     }
     return results;

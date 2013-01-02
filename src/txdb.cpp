@@ -145,7 +145,7 @@ bool CCoinsViewDB::GetStats(CCoinsStats &stats) {
     return true;
 }
 
-bool CCoinsViewDB::GetRegistrations(vector<CTxOut>& results, const string& alias) {
+bool CCoinsViewDB::GetRegistrations(vector<pair<uint256, CTxOut> >& results, const string& alias) {
     leveldb::Iterator *pcursor = db.NewIterator();
     pcursor->SeekToFirst();
 
@@ -174,7 +174,7 @@ bool CCoinsViewDB::GetRegistrations(vector<CTxOut>& results, const string& alias
 
                 BOOST_FOREACH(const CTxOut &out, coins.vout) {
                     if (ExtractRegistration(out.scriptPubKey, pubkeySearch, owner, certhash, nRequired))
- 		        results.push_back(out);
+		      results.push_back(make_pair(txhash,out));
                 }
             }
             pcursor->Next();
