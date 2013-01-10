@@ -234,6 +234,17 @@ Value getregistrations(const Array& params, bool fHelp)
 	if (nRequired > 2)
             entry.push_back(Pair("certhash",HexStr(certhash.Raw())));
         entry.push_back(Pair("txid",reg.first.ToString()));
+        CCoins coins;
+        if (!pcoinsTip->GetCoins(reg.first, coins))
+            return Value::null;
+        if ((unsigned int)coins.nHeight == MEMPOOL_HEIGHT)
+            entry.push_back(Pair("confirmations", 0));
+        else
+            entry.push_back(Pair("confirmations", pcoinsTip->GetBestBlock()->nHeight - coins.nHeight + 1));
+        entry.push_back(Pair("nHeight", coins.nHeight));
+        CBlockIndex *pindex = FindBlockByHeight(coins.nHeight);
+        entry.push_back(Pair("nTime", strprintf("%u",pindex->nTime)));
+        entry.push_back(Pair("strTime", DateTimeStrFormat("%Y-%m-%dT%H:%M:%S", pindex->nTime).c_str()));
 	results.push_back(entry);
     }
     return results;
