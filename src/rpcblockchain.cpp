@@ -5,9 +5,9 @@
 
 #include "main.h"
 #include "bitcoinrpc.h"
-//REGALIAS
-#include <boost/algorithm/string.hpp>
-#include "base58.h"
+//BTCPKI
+#include "alias.h" 
+//#include "base58.h" // CBitcoinAddress
 
 using namespace json_spirit;
 using namespace std;
@@ -185,69 +185,50 @@ Value getregistrations(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() > 1 || params.size() < 1)
         throw runtime_error(
-            "listregistrations <alias>\n"
+            "getregistrations <alias>\n"
             "Returns array of unspent transaction outputs that contain a registration of <alias>.\n"
             "This means that the output is TX_MULTISIG and contains the pubkey corresponding to <alias>.\n"
             "Results are an array of Objects, each of which has:\n"
             "{txid, vout, scriptPubKey, amount, .., owner, certhash, ... }");
 
-    // check if alias is valid
-    std::string alias("alias_testv1_"+params[0].get_str()); 
-    BOOST_FOREACH(unsigned char c, alias)
-    {
-        if (!((c>=65 && c<=90) || (c>=97 && c<=122) || (c>=48 && c<=57) || (c==95) || (c==45)))
-            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC getregistrations: alias may contain only characters a-z,A-Z,0-1,_,-");
-    }
-    // TODO further restrict to "domain names"? (start with letter etc.)
-    boost::to_upper(alias);
+    CAlias alias;
+    if (!alias.SetName(params[0].get_str()))
+      throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC getregistrations: alias may contain only characters a-z,A-Z,0-1,_,-, must start with letter and not end in _,-");
+    //    const CPubKey searchKey = alias.GetPubKey();
 
-    // generate pubkey corresponding to alias
-    CKey key;
-    if (!key.SetSecretByLabel(alias))
-    {
-        throw runtime_error("getregistrations: SetSecretByLabel failed");
-    }
-    const CPubKey pubkeySearch = key.GetPubKey();
-    CPubKey owner, certhash;
-    int nRequired;
+    // compile output 1
+    Object result;
+    Array entries;
+    result.push_back(Pair("alias", alias.ToJSON()));
 
-    vector<pair<uint256, CTxOut> > regs;
-    if (!pcoinsTip->GetRegistrations(regs,alias))
-        throw runtime_error("RPC getregistrations: GetRegistrations failed.");
+    // lookup alias
+    uint256 txid;
+    CCoins coins;
+    vector<unsigned int> outs;
+    bool fRegistered = pcoinsTip->GetFirstMultisigWithPubKey(alias.GetPubKey(),txid,coins,outs);
+    result.push_back(Pair("fRegistered", fRegistered));
 
-    Array results;
-    BOOST_FOREACH(const PAIRTYPE(uint256,CTxOut)& reg, regs) {
-        CTxOut out = reg.second;
-        ExtractRegistration(out.scriptPubKey, pubkeySearch, owner, certhash, nRequired);
-	const CScript& pk = out.scriptPubKey;
-	Object entry;
-	//entry.push_back(Pair("txid", out.tx->GetHash().GetHex()));
-	//entry.push_back(Pair("vout", out.i));
-	entry.push_back(Pair("scriptPubKey", HexStr(pk.begin(), pk.end())));
-	entry.push_back(Pair("nRequired", nRequired));
-	entry.push_back(Pair("amount",ValueFromAmount(out.nValue)));
-	//			entry.push_back(Pair("confirmations",out.nDepth));
-	entry.push_back(Pair("alias_pubkey",HexStr(pubkeySearch.Raw())));
-	entry.push_back(Pair("alias_addr",CBitcoinAddress(pubkeySearch.GetID()).ToString()));
-	entry.push_back(Pair("owner_pubkey",HexStr(owner.Raw())));
-	entry.push_back(Pair("owner_addr",CBitcoinAddress(owner.GetID()).ToString()));
-	if (nRequired > 2)
-            entry.push_back(Pair("certhash",HexStr(certhash.Raw())));
-        entry.push_back(Pair("txid",reg.first.ToString()));
-        CCoins coins;
-        if (!pcoinsTip->GetCoins(reg.first, coins))
-            return Value::null;
-        if ((unsigned int)coins.nHeight == MEMPOOL_HEIGHT)
-            entry.push_back(Pair("confirmations", 0));
-        else
-            entry.push_back(Pair("confirmations", pcoinsTip->GetBestBlock()->nHeight - coins.nHeight + 1));
-        entry.push_back(Pair("nHeight", coins.nHeight));
-        CBlockIndex *pindex = FindBlockByHeight(coins.nHeight);
-        entry.push_back(Pair("nTime", strprintf("%u",pindex->nTime)));
-        entry.push_back(Pair("strTime", DateTimeStrFormat("%Y-%m-%dT%H:%M:%S", pindex->nTime).c_str()));
-	results.push_back(entry);
-    }
-    return results;
+    if (fRegistered)
+      {
+	// compile output 2
+	result.push_back(Pair("txid",txid.ToString()));
+	result.push_back(Pair("coins", CoinsToJSON(coins)));
+	result.push_back(Pair("nRegistrations", (int)outs.size()));
+	for (unsigned int i=0; i<outs.size(); i++) {
+	  Object entry;
+	  unsigned int nOut = outs[i];
+	  entry.push_back(Pair("nOut", (int)nOut));
+	  CRegistration reg;
+	  if (!reg.SetByScript(coins.vout[nOut].scriptPubKey))
+	    throw runtime_error("RPC getregistrations: SetByScript failed.");
+	  entry.push_back(Pair("registration", reg.ToJSON()));
+	  entry.push_back(Pair("amount",ValueFromAmount(coins.vout[nOut].nValue)));
+	  entries.push_back(entry);
+	}
+	result.push_back(Pair("list", entries));
+      }
+
+    return result;
 }
 
 Value gettxout(const Array& params, bool fHelp)

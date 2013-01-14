@@ -10,8 +10,7 @@
 #include "bitcoinrpc.h"
 #include "init.h"
 #include "base58.h"
-//REGALIAS
-#include <boost/algorithm/string.hpp>
+#include "alias.h"
 
 using namespace std;
 using namespace boost;
@@ -810,7 +809,6 @@ Value createmultisig(const Array& params, bool fHelp)
     return result;
 }
 
-// REGALIAS
 Value registeralias(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() < 2 || params.size() > 3)
@@ -823,105 +821,93 @@ Value registeralias(const Array& params, bool fHelp)
 
         throw runtime_error(msg);
     }
-    // testnet only
-    if (!fTestNet)
+
+    // testnet only?
+    if (BTCPKI_TESTNETONLY && !fTestNet)
       throw runtime_error("RPC registeralias: disabled on mainnet");
     
-    // check if alias is valid
-    std::string alias("alias_testv1_"+params[0].get_str()); 
-    BOOST_FOREACH(unsigned char c, alias)
-    {
-        if (!((c>=65 && c<=90) || (c>=97 && c<=122) || (c>=48 && c<=57) || (c==95) || (c==45)))
-            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC registeralias: alias may contain only characters a-z,A-Z,0-1,_,-");
-    }
-    // TODO further restrict to "domain names"? (start with letter etc.)
-    boost::to_upper(alias);
+    // build alias
+    CAlias alias;
+    if (!alias.SetName(params[0].get_str()))
+      throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC getregistrations: alias may contain only characters a-z,A-Z,0-1,_,-, must start with letter and not end in _,-");
 
-    // Amount
+    // set amount (and override)
     int64 nAmount = AmountFromValue(params[1]);
-    // override
-    nAmount=10000;
+    if (nAmount > BTCPKI_MAXAMOUNT)
+      nAmount = BTCPKI_MAXAMOUNT;
 
-    // key vector 
-    std::vector<CKey> keys;
-    keys.resize(params.size());
-    int nRequired(2);
-
-    // generate key 0 (alias)
-    if (!keys[0].SetSecretByLabel(alias))
-    {
-        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC registeralias: SetSecretByLabel failed");
-    }
-
-    // generate key 1 (taken from keypool) 
+    // get new key from keypool 
     CPubKey newKey;
     if (!pwalletMain->GetKeyFromPool(newKey, false))
         throw JSONRPCError(RPC_WALLET_KEYPOOL_RAN_OUT, "Error: Keypool ran out, please call keypoolrefill first");
-    keys[1].SetPubKey(newKey);
 
-
-    // generate key 2 (certificate hash)
+    // get certificate hash
+    //    int nRequired(2);
+    uint256 certhash;
     if (params.size() > 2)
     {
-        nRequired = 3;
-        string certhash(params[2].get_str());
-        if (!IsHex(certhash))
-            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC registeralias: certhash not in Hex format");
-        uint256 num(certhash);
-        if (!num)
-            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC registeralias: num conversion failed");
-        if (!keys[2].SetSecretByNumber(num))
-            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC registeralias: SetSecretByNumber failed");
+      //nRequired = 3;
+        if (!IsHex(params[2].get_str()))
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC registeralias: certhash not in hex format");
+	uint256 num(params[2].get_str());
+	certhash = num;
+        if (!certhash)
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC registeralias: certhash is invalid (zero)");
     }
 
-    // create multisig script
-    CScript inner;
-    inner.SetMultisig(nRequired, keys);
-
+    // build registration
+    CRegistration reg(alias,newKey,certhash);
+       
     // Wallet comments
     CWalletTx wtx;
-    wtx.mapValue["comment"] = "REGALIAS alias v0.1";
-    wtx.mapValue["to"]      = params[0].get_str();
+    wtx.mapValue["comment"] = "BTCPKI alias registration v";
+    wtx.mapValue["comment"] += BTCPKI_VERSION;
+    wtx.mapValue["to"]      = alias.GetName();
 
-    // unlocked?
+    // wallet locked?
     if (pwalletMain->IsLocked())
         throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED, "Error: Please enter the wallet passphrase with walletpassphrase first.");
 
-
     // check if alias address is new, set labels
-    pwalletMain->SetAddressBookName(keys[0].GetPubKey().GetID(), alias+"_addr");
-    if (!pwalletMain->AddKey(keys[0]))
+    pwalletMain->SetAddressBookName(alias.GetPubKeyID(), alias.addressbookname(ADDR));
+    if (!pwalletMain->AddKey(alias.GetKey()))
         throw JSONRPCError(RPC_WALLET_ERROR, "Error adding alias address to wallet. Already registered? Not sending.");
 
+    // compile output 1
+    Object regResult;
+    regResult.push_back(Pair("registration", reg.ToJSON()));
+    regResult.push_back(Pair("alias", alias.ToJSON()));
+    regResult.push_back(Pair("certhash", certhash.ToString()));
+    regResult.push_back(Pair("amount", ValueFromAmount(nAmount)));
+
     // sending
-    string strError = pwalletMain->SendMoney(inner, nAmount, wtx);
+    string strError = pwalletMain->SendMoney(reg.GetScript(), nAmount, wtx);
     if (strError != "")
         throw JSONRPCError(RPC_WALLET_ERROR, strError);
 
+    // find outpoint
+    COutPoint outpt;
+    for (unsigned int i=0; i<wtx.vout.size(); i++)
+      {
+	if (wtx.vout[i].scriptPubKey == reg.GetScript())
+	  outpt = COutPoint(wtx.GetHash(), i);
+      }
+
+    // compile output 2
+    regResult.push_back(Pair("outpoint", OutPointToJSON(outpt)));
+
     // set labels
-    pwalletMain->SetAddressBookName(keys[1].GetPubKey().GetID(), alias+"_owner");
+    pwalletMain->SetAddressBookName(reg.GetOwnerPubKey().GetID(), alias.addressbookname(OWNER));
     if (params.size() > 2)
     {
-      pwalletMain->SetAddressBookName(keys[2].GetPubKey().GetID(), alias+"_certhash");
-      if (!pwalletMain->AddKey(keys[2]))
-      {
-//          throw JSONRPCError(RPC_WALLET_ERROR, "Error adding certhash address to wallet. Already registered?");
-      }
+      pwalletMain->SetAddressBookName(reg.GetCertPubKey().GetID(), alias.addressbookname(CERT));
+      pwalletMain->AddKey(reg.GetCertKey());
     }
 
-    // compile output
-    Object result;
-    result.push_back(Pair("txid", wtx.GetHash().GetHex()));
-    result.push_back(Pair("alias_str", alias));
-    result.push_back(Pair("alias_pubkey", HexStr(keys[0].GetPubKey().Raw())));
-    result.push_back(Pair("alias_pubkey_addr", CBitcoinAddress(keys[0].GetPubKey().GetID()).ToString()));
-    result.push_back(Pair("owner_pubkey", HexStr(keys[1].GetPubKey().Raw())));
-    result.push_back(Pair("owner_pubkey_addr", CBitcoinAddress(keys[1].GetPubKey().GetID()).ToString()));
-    result.push_back(Pair("redeemScript", HexStr(inner.begin(), inner.end())));
-    result.push_back(Pair("redeemScript_str", inner.ToString()));
-    result.push_back(Pair("amount", ValueFromAmount(nAmount)));
+    // lock outpoint
+    pwalletMain->LockCoin(outpt);
 
-    return result;
+    return regResult;
 }
 
 struct tallyitem

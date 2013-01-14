@@ -1,3 +1,40 @@
+CHANGES
+-------
+bitcoinrpc.cpp .h:
+  registeralias
+  getregistrations
+rpcwallet.cpp: 
+  registeralias RPC
+  derived from createmultisig
+rpcblockchain.cpp: 
+  getregistrations RPC
+  derived from gettxoutsetinfo
+txdb.cpp: 
+  CCoinsViewDB::GetAliasRegistration(CPubKey searchKey) -> txID, ccoins, outs
+  derived from CCoinsViewDB::GetStats
+script.cpp:
+  IsMultisigWithPubKey(CScript scriptPubKey, CPubKey searchKey) -> bool 
+  ExtractPubKeysFromMultisig(CScript scriptPubKey) -> vector<CPubKey>
+  derived from ExtractDestination
+alias.cpp:
+  class CAlias
+  class CRegistration
+  new
+main.cpp:
+  CCoinsView::GetFirstMultisigWithPubKey
+  CCoinsViewBacked::GetFirstMultisigWithPubKey
+  derived from GetStats
+main.h:
+  class CCoinsView:
+    virtual bool GetFirstMultisigWithPubKey
+  class CCoinsViewBacked:
+    bool GetFirstMultisigWithPubKey
+  derived from GetStats
+key.cpp:
+  SetSecretByNumber (derived from SetSecret)
+  HasPrivKey (derived from GetPrivKey)
+
+
 cd src
 make -f makefile.unix
 ./bitcoind -testnet stop ; sleep 1 ; ./bitcoind -testnet -daemon

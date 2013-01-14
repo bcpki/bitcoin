@@ -1636,23 +1636,34 @@ bool ExtractDestinations(const CScript& scriptPubKey, txnouttype& typeRet, vecto
     return true;
 }
 
-bool ExtractRegistration(const CScript& scriptPubKey, const CPubKey& pubkeySearch, CPubKey& ownerRet, CPubKey& certhashRet, int& nRequiredRet )
+bool IsMultisigWithPubKey(const CScript& scriptPubKey, const CPubKey& searchKey) 
+{
+  txnouttype typeRet = TX_NONSTANDARD;
+  vector<valtype> vSolutions;
+  if (!Solver(scriptPubKey, typeRet, vSolutions))
+    return false;
+
+  return ((typeRet == TX_MULTISIG) && (CPubKey(vSolutions[1]) == searchKey));
+}
+
+bool ExtractPubKeysFromMultisig(const CScript& scriptPubKey, vector<CPubKey>& results) 
 {
     txnouttype typeRet = TX_NONSTANDARD;
     vector<valtype> vSolutions;
     if (!Solver(scriptPubKey, typeRet, vSolutions))
         return false;
 
-    if ((typeRet == TX_MULTISIG) && (CPubKey(vSolutions[1]) == pubkeySearch))
+    if ((typeRet != TX_MULTISIG))
+        return false;
+
+    //nRequired = vSolutions.front()[0];
+    for (unsigned int i = 1; i < vSolutions.size()-1; i++)
     {
-        nRequiredRet = vSolutions.front()[0];
-	ownerRet = CPubKey(vSolutions[2]);
-	if (vSolutions.size() > 4)
-	    certhashRet = CPubKey(vSolutions[3]);
-	return true;
+        CPubKey pubkey(vSolutions[i]);
+        results.push_back(pubkey);
     }
 
-    return false;
+    return true;
 }
 
 bool VerifyScript(const CScript& scriptSig, const CScript& scriptPubKey, const CTransaction& txTo, unsigned int nIn,

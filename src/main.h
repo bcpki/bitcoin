@@ -9,7 +9,7 @@
 #include "sync.h"
 #include "net.h"
 #include "script.h"
-// REGALIAS
+// BTCPKI
 #include "json/json_spirit_utils.h"
 
 #include <list>
@@ -1902,8 +1902,9 @@ public:
     // Calculate statistics about the unspent transaction output set
     virtual bool GetStats(CCoinsStats &stats);
 
-    // Get registrations from the unspent transaction output set
-    virtual bool GetRegistrations(std::vector<std::pair<uint256,CTxOut> >& results, const std::string& alias);
+    // PKI-BTC
+    // Get alias registrations from the unspent transaction output set
+    virtual bool GetFirstMultisigWithPubKey(const CPubKey& searchKey, uint256& txRet, CCoins& coinsRet, std::vector<unsigned int>& outRet);
 
     // As we use CCoinsViews polymorphically, have a virtual destructor
     virtual ~CCoinsView() {}
@@ -1925,7 +1926,7 @@ public:
     void SetBackend(CCoinsView &viewIn);
     bool BatchWrite(const std::map<uint256, CCoins> &mapCoins, CBlockIndex *pindex);
     bool GetStats(CCoinsStats &stats);
-    bool GetRegistrations(std::vector<std::pair<uint256,CTxOut> >& results, const std::string& alias);
+    bool GetFirstMultisigWithPubKey(const CPubKey& searchKey, uint256& txRet, CCoins& coinsRet, std::vector<unsigned int>& outRet);
 };
 
 /** CCoinsView that adds a memory cache for transactions to another CCoinsView */

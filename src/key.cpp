@@ -8,7 +8,7 @@
 #include <openssl/obj_mac.h>
 
 #include "key.h"
-// REGALIAS
+// BTCPKI
 #include "bignum.h"
 
 // Generate a private key from just the secret parameter
@@ -208,7 +208,7 @@ bool CKey::SetPrivKey(const CPrivKey& vchPrivKey)
     return false;
 }
 
-// REGALIAS
+// BTCPKI
 bool CKey::SetSecretByNumber(uint256 num, bool fCompressed)
 {
     CBigNum N(num);
@@ -228,10 +228,6 @@ bool CKey::SetSecretByNumber(uint256 num, bool fCompressed)
     if (fCompressed || fCompressedPubKey)
         SetCompressedPubKey();
     return true;
-}
-bool CKey::SetSecretByLabel(const std::string& str, bool fCompressed)
-{
-    return this->SetSecretByNumber(Hash(str.begin(),str.end()),fCompressed);
 }
 
 bool CKey::SetSecret(const CSecret& vchSecret, bool fCompressed)
@@ -282,6 +278,18 @@ CPrivKey CKey::GetPrivKey() const
     if (i2d_ECPrivateKey(pkey, &pbegin) != nSize)
         throw key_error("CKey::GetPrivKey() : i2d_ECPrivateKey returned unexpected size");
     return vchPrivKey;
+}
+
+bool CKey::HasPrivKey() const
+{
+    int nSize = i2d_ECPrivateKey(pkey, NULL);
+    if (!nSize)
+      return false;
+    CPrivKey vchPrivKey(nSize, 0);
+    unsigned char* pbegin = &vchPrivKey[0];
+    if (i2d_ECPrivateKey(pkey, &pbegin) != nSize)
+      return false;
+    return true;
 }
 
 bool CKey::SetPubKey(const CPubKey& vchPubKey)

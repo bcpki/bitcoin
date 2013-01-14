@@ -12,8 +12,6 @@
 #include "main.h"
 #include "net.h"
 #include "wallet.h"
-//REGALIAS
-#include <boost/algorithm/string.hpp>
 
 using namespace std;
 using namespace boost;
@@ -241,66 +239,6 @@ Value listunspent(const Array& params, bool fHelp)
         }
         entry.push_back(Pair("amount",ValueFromAmount(nValue)));
         entry.push_back(Pair("confirmations",out.nDepth));
-        results.push_back(entry);
-    }
-
-    return results;
-}
-
-Value listregistrations(const Array& params, bool fHelp)
-{
-    if (fHelp || params.size() > 3)
-        throw runtime_error(
-            "listregistrations <alias>\n"
-            "Returns array of unspent transaction outputs that contain a registration of <alias>.\n"
-            "This means that the output is TX_MULTISIG and contains the pubkey corresponding to <alias>.\n"
-            "Results are an array of Objects, each of which has:\n"
-            "{txid, vout, scriptPubKey, amount, confirmations}");
-
-    // check if alias is valid
-    std::string alias("alias_testv1_"+params[0].get_str()); 
-    BOOST_FOREACH(unsigned char c, alias)
-    {
-        if (!((c>=65 && c<=90) || (c>=97 && c<=122) || (c>=48 && c<=57) || (c==95) || (c==45)))
-            throw runtime_error("RPC listregistrations: alias may contain only characters a-z,A-Z,0-1,_,-");
-    }
-    // TODO further restrict to "domain names"? (start with letter etc.)
-    boost::to_upper(alias);
-
-    CKey key;
-    // generate key corresponding to alias
-    if (!key.SetSecretByLabel(alias))
-    {
-        throw runtime_error("RPC listregistrations: SetSecretByLabel failed");
-    }
-    CPubKey pubkeySearch = key.GetPubKey(), owner, certhash;
-    int nRequired;
-
-    Array results;
-    vector<COutput> vecOutputs;
-    pwalletMain->AvailableCoins(vecOutputs, false);
-    BOOST_FOREACH(const COutput& out, vecOutputs)
-    {
-      //        if (out.nDepth < nMinDepth || out.nDepth > nMaxDepth)
-      //     continue;
-
-        CTxDestination address;
-        if (!ExtractRegistration(out.tx->vout[out.i].scriptPubKey, pubkeySearch, owner, certhash, nRequired))
-            continue;
-    
-        int64 nValue = out.tx->vout[out.i].nValue;
-        const CScript& pk = out.tx->vout[out.i].scriptPubKey;
-        Object entry;
-        entry.push_back(Pair("txid", out.tx->GetHash().GetHex()));
-        entry.push_back(Pair("vout", out.i));
-        entry.push_back(Pair("scriptPubKey", HexStr(pk.begin(), pk.end())));
-        entry.push_back(Pair("amount",ValueFromAmount(nValue)));
-        entry.push_back(Pair("confirmations",out.nDepth));
-        entry.push_back(Pair("alias_pubkey",HexStr(pubkeySearch.Raw())));
-        entry.push_back(Pair("alias_addr",CBitcoinAddress(pubkeySearch.GetID()).ToString()));
-        entry.push_back(Pair("owner_pubkey",HexStr(owner.Raw())));
-        entry.push_back(Pair("owner_addr",CBitcoinAddress(owner.GetID()).ToString()));
-        entry.push_back(Pair("certhash",HexStr(certhash.Raw())));
         results.push_back(entry);
     }
 

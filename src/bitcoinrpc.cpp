@@ -230,7 +230,7 @@ static const CRPCCommand vRPCCommands[] =
     { "sendmany",               &sendmany,               false,  false },
     { "addmultisigaddress",     &addmultisigaddress,     false,  false },
     { "createmultisig",         &createmultisig,         true,   true  },
-// REGALIAS
+// BTCPKI
     { "registeralias",          &registeralias,          true,   true  },
     { "getrawmempool",          &getrawmempool,          true,   false },
     { "getblock",               &getblock,               false,  false },
@@ -249,15 +249,13 @@ static const CRPCCommand vRPCCommands[] =
     { "dumpprivkey",            &dumpprivkey,            false,  false },
     { "importprivkey",          &importprivkey,          false,  false },
     { "listunspent",            &listunspent,            false,  false },
-// REGALIAS
-    { "listregistrations",      &listregistrations,      false,  false },
     { "getrawtransaction",      &getrawtransaction,      false,  false },
     { "createrawtransaction",   &createrawtransaction,   false,  false },
     { "decoderawtransaction",   &decoderawtransaction,   false,  false },
     { "signrawtransaction",     &signrawtransaction,     false,  false },
     { "sendrawtransaction",     &sendrawtransaction,     false,  false },
     { "gettxoutsetinfo",        &gettxoutsetinfo,        true,   false },
-// REGALIAS
+// BTCPKI
     { "getregistrations",       &getregistrations,       true,   false },
     { "gettxout",               &gettxout,               true,   false },
     { "lockunspent",            &lockunspent,            false,  false },
@@ -1188,7 +1186,7 @@ Array RPCConvertValues(const std::string &strMethod, const std::vector<std::stri
     if (strMethod == "setgenerate"            && n > 0) ConvertTo<bool>(params[0]);
     if (strMethod == "setgenerate"            && n > 1) ConvertTo<boost::int64_t>(params[1]);
     if (strMethod == "sendtoaddress"          && n > 1) ConvertTo<double>(params[1]);
-//REGALIAS
+//BTCPKI
     if (strMethod == "registeralias"          && n > 1) ConvertTo<double>(params[1]);
     if (strMethod == "settxfee"               && n > 0) ConvertTo<double>(params[0]);
     if (strMethod == "getreceivedbyaddress"   && n > 1) ConvertTo<boost::int64_t>(params[1]);

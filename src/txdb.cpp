@@ -145,24 +145,17 @@ bool CCoinsViewDB::GetStats(CCoinsStats &stats) {
     return true;
 }
 
-bool CCoinsViewDB::GetRegistrations(vector<pair<uint256, CTxOut> >& results, const string& alias) {
+bool CCoinsViewDB::GetFirstMultisigWithPubKey(const CPubKey& searchKey, uint256& txRet, CCoins& coinsRet, vector<unsigned int>& outRet) {
     leveldb::Iterator *pcursor = db.NewIterator();
     pcursor->SeekToFirst();
 
-    // generate pubkey corresponding to alias
-    CKey key;
-    if (!key.SetSecretByLabel(alias))
-    {
-        throw runtime_error("GetRegistrations: SetSecretByLabel failed");
-    }
-    CPubKey pubkeySearch = key.GetPubKey(), owner, certhash;
-    int nRequired;
-
+    int height = -1;
     while (pcursor->Valid()) {
         try {
             leveldb::Slice slKey = pcursor->key();
             CDataStream ssKey(slKey.data(), slKey.data()+slKey.size(), SER_DISK, CLIENT_VERSION);
             char chType;
+	    
             ssKey >> chType;
             if (chType == 'c' && !fRequestShutdown) {
                 leveldb::Slice slValue = pcursor->value();
@@ -171,11 +164,27 @@ bool CCoinsViewDB::GetRegistrations(vector<pair<uint256, CTxOut> >& results, con
                 ssValue >> coins;
                 uint256 txhash;
                 ssKey >> txhash;
+ 
+		if ((height > 0) && (coins.nHeight > height))
+		  {
+		    pcursor->Next();
+		    continue; // while (pursor->Valid())
+		  }
 
-                BOOST_FOREACH(const CTxOut &out, coins.vout) {
-                    if (ExtractRegistration(out.scriptPubKey, pubkeySearch, owner, certhash, nRequired))
-		      results.push_back(make_pair(txhash,out));
-                }
+                vector<unsigned int> outs;
+		for (unsigned int i=0; i<coins.vout.size() && i<1; i++) {
+		  if (IsMultisigWithPubKey(coins.vout[i].scriptPubKey,searchKey))
+		    {
+		      outs.push_back(i);
+		    }
+		}
+
+		if (outs.size() > 0) {
+		      coinsRet = coins; 
+		      txRet = txhash;
+		      outRet = outs;
+		      height = coins.nHeight;
+		}
             }
             pcursor->Next();
         } catch (std::exception &e) {
@@ -183,7 +192,7 @@ bool CCoinsViewDB::GetRegistrations(vector<pair<uint256, CTxOut> >& results, con
         }
     }
     delete pcursor;
-    return true;
+    return (height > 0);
 }
 
 bool CBlockTreeDB::LoadBlockIndexGuts()
