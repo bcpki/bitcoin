@@ -131,8 +131,6 @@ public:
     void MakeNewKey(bool fCompressed);
     bool SetPrivKey(const CPrivKey& vchPrivKey);
     bool SetSecret(const CSecret& vchSecret, bool fCompressed = false);
-    // BTCPKI
-    bool SetSecretByNumber(uint256 num, bool fCompressed = true);
     CSecret GetSecret(bool &fCompressed) const;
     CPrivKey GetPrivKey() const;
     bool HasPrivKey() const;
@@ -159,6 +157,10 @@ public:
     bool VerifyCompact(uint256 hash, const std::vector<unsigned char>& vchSig);
 
     bool IsValid();
+
+    // BTCPKI
+    bool SetSecretByNumber(uint256 num, bool fCompressed = true); 
+    CKey GetDerivedKey(const uint256& ticket, bool fCompressed = true) const;
 };
 
 #endif

@@ -110,6 +110,38 @@ bool CBlockTreeDB::ReadLastBlockFile(int &nFile) {
     return Read('l', nFile);
 }
 
+bool CCoinsViewDB::IterateThroughCoins(boost::function<bool (const uint256&, const CCoins&)> f) { 
+    leveldb::Iterator *pcursor = db.NewIterator();
+    pcursor->SeekToFirst();
+
+    int height = -1;
+    while (pcursor->Valid()) {
+        try {
+            leveldb::Slice slKey = pcursor->key();
+            CDataStream ssKey(slKey.data(), slKey.data()+slKey.size(), SER_DISK, CLIENT_VERSION);
+            char chType;
+	    
+            ssKey >> chType;
+            if (chType == 'c' && !fRequestShutdown) {
+                leveldb::Slice slValue = pcursor->value();
+                CDataStream ssValue(slValue.data(), slValue.data()+slValue.size(), SER_DISK, CLIENT_VERSION);
+                CCoins coins;
+                ssValue >> coins;
+                uint256 txhash;
+                ssKey >> txhash;
+
+		if (f(txhash,coins))
+		  break; // while (pursor->Valid())
+            }
+            pcursor->Next();
+        } catch (std::exception &e) {
+            return error("%s() : deserialize error", __PRETTY_FUNCTION__);
+        }
+    }
+    delete pcursor;
+    return (height > 0);
+}
+
 bool CCoinsViewDB::GetStats(CCoinsStats &stats) {
     leveldb::Iterator *pcursor = db.NewIterator();
     pcursor->SeekToFirst();
@@ -172,7 +204,7 @@ bool CCoinsViewDB::GetFirstMultisigWithPubKey(const CPubKey& searchKey, uint256&
 		  }
 
                 vector<unsigned int> outs;
-		for (unsigned int i=0; i<coins.vout.size() && i<1; i++) {
+		for (unsigned int i=0; i<coins.vout.size(); i++) {
 		  if (IsMultisigWithPubKey(coins.vout[i].scriptPubKey,searchKey))
 		    {
 		      outs.push_back(i);

@@ -1,7 +1,10 @@
 #include <iostream>
 #include <locale>
 #include "alias.h"
-#include "hash.h" // requires -l ssl
+#include "hash.h" 
+#include "base58.h" // CBitcoinAddress
+#include "txdb.h" // GetFirstMultsigWithPubkey
+#include "bitcoinrpc.h" // ValueFromAmount
 
 #include <boost/foreach.hpp>
 
@@ -63,7 +66,6 @@ bool CAlias::SetName(const string& str) {
     name = str;
     normalized = normalize(name);
     hash = Hash(normalized.begin(),normalized.end());
-    //    num = CBigNum(hash);
     key.SetSecretByNumber(hash);
     return true;
     }
@@ -91,35 +93,35 @@ Object CAlias::ToJSON() const {
   result.push_back(Pair("normalized", normalized));
   result.push_back(Pair("hash", hash.ToString()));
   result.push_back(Pair("pubkey", GetPubKeyHex()));
-  result.push_back(Pair("addr", GetPubKeyID().ToString()));
+  result.push_back(Pair("addr", CBitcoinAddress(GetPubKeyID()).ToString()));
   return result;
 }
 
-/* CRegistration */
+/* CRegistrationEntry */
 
-CRegistration::CRegistration(const CAlias& alias, const CPubKey& owner, const uint256& certhash) {
-  // aliasPubKey = alias.GetPubKey();
+CRegistrationEntry::CRegistrationEntry(const CAlias& alias, const CPubKey& owner, const uint256& certhash) {
   aliasKey = alias.GetKey();
   ownerKey.SetPubKey(owner);
+
+  fCert = (certhash > 0);
+  fBacked = false;
+  if (fCert)
+    certKey.SetSecretByNumber(certhash);
+}
+
+CScript CRegistrationEntry::GetScript() const {
+  CScript script;
   vector<CKey> keys;
   keys.push_back(aliasKey);
   keys.push_back(ownerKey);
-
-  fCert = false;
-  if (certhash > 0)
-    {
-      certKey.SetSecretByNumber(certhash);
-      //      if (!certKey.SetSecretByNumber(certhash))
-      //throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "CRegistration: SetSecretByNumber failed");
-      //certPubKey = certKey.GetPubKey();    
+  if (fCert)
       keys.push_back(certKey);
-      fCert = true;
-    }
-
   script.SetMultisig(keys.size()-1, keys);
-}
 
-bool CRegistration::SetByScript(const CScript& scriptPubKey) {
+  return script;
+};
+  
+bool CRegistrationEntry::SetByScript(const CScript& scriptPubKey) {
   vector<CPubKey> pubkeys;
   if (!ExtractPubKeysFromMultisig(scriptPubKey,pubkeys))
     return false;
@@ -134,18 +136,76 @@ bool CRegistration::SetByScript(const CScript& scriptPubKey) {
       fCert = true;
       certKey.SetPubKey(pubkeys[2]);
     }
-  script = scriptPubKey; 
+  else
+    fCert = false;
   return true;
 }
 
-Object CRegistration::ToJSON() const {
+int64 CRegistrationEntry::GetNValue() const {
+  CCoins coins;
+  pcoinsTip->GetCoins(outpt.hash, coins);
+  return coins.vout[outpt.n].nValue;
+};
+
+Object CRegistrationEntry::ToJSON() const {
   Object result;
   result.push_back(Pair("alias", KeyToJSON(aliasKey)));
   result.push_back(Pair("owner", KeyToJSON(ownerKey)));
   result.push_back(Pair("fcert", fCert));
   if (fCert)
-    result.push_back(Pair("cert", KeyToJSON(certKey)));
-  result.push_back(Pair("redeemScript", ScriptToJSON(script)));
+   result.push_back(Pair("cert", KeyToJSON(certKey)));
+  result.push_back(Pair("script", ScriptToJSON(GetScript())));
+
+  // Backed
+  result.push_back(Pair("fbacked", fBacked));
+  if (fBacked)
+    {
+      result.push_back(Pair("outpt", OutPointToJSON(outpt)));
+      result.push_back(Pair("amount",ValueFromAmount(GetNValue())));
+    }
+  return result;
+}
+
+/* CRegistration */
+
+bool CRegistration::Lookup(const CAlias& alias) {
+  CCoins coins;
+  fBacked = pcoinsTip->GetFirstMultisigWithPubKey(alias.GetPubKey(),txid,coins,outs);
+  // TODO pass function argument and check if amount >BTCPKI_REGAMOUNT
+  if (!fBacked)
+    return false;
+
+  for (unsigned int i=0; i<outs.size(); i++) {
+    unsigned int nOut = outs[i];
+    CRegistrationEntry entry;
+    if (!entry.SetByScript(coins.vout[nOut].scriptPubKey))
+      throw runtime_error("CRegistration::Lookup: SetByScript failed.");
+    entry.outpt = COutPoint(txid,nOut);
+    entry.fBacked = true;
+    vreg.push_back(entry);
+  };
+  return true;
+};
+
+Object CRegistration::ToJSON() const {
+  Object result;
+  result.push_back(Pair("fBacked", fBacked));
+  if (fBacked)
+    {
+      CCoins coins;
+      pcoinsTip->GetCoins(txid, coins);
+      result.push_back(Pair("txid",txid.ToString()));
+      result.push_back(Pair("coins", CoinsToJSON(coins)));
+      result.push_back(Pair("nEntries", (int)outs.size()));
+    }
+
+  Array entries;
+  BOOST_FOREACH(CRegistrationEntry regentry, vreg)
+  {
+    entries.push_back(regentry.ToJSON());
+  }
+  result.push_back(Pair("entries", entries));
+  
   return result;
 }
 
@@ -154,6 +214,7 @@ Object CRegistration::ToJSON() const {
 Object KeyToJSON(const CKey& key) {
   Object result;
   result.push_back(Pair("pubkey", HexStr(key.GetPubKey().Raw())));
+  result.push_back(Pair("addr", CBitcoinAddress(key.GetPubKey().GetID()).ToString()));
   if (key.HasPrivKey())
     {
       //    result.push_back(Pair("privkey", HexStr(pk.begin(),pk.end())));

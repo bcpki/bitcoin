@@ -191,42 +191,20 @@ Value getregistrations(const Array& params, bool fHelp)
             "Results are an array of Objects, each of which has:\n"
             "{txid, vout, scriptPubKey, amount, .., owner, certhash, ... }");
 
+    // build alias
     CAlias alias;
     if (!alias.SetName(params[0].get_str()))
       throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC getregistrations: alias may contain only characters a-z,A-Z,0-1,_,-, must start with letter and not end in _,-");
-    //    const CPubKey searchKey = alias.GetPubKey();
-
-    // compile output 1
-    Object result;
-    Array entries;
-    result.push_back(Pair("alias", alias.ToJSON()));
 
     // lookup alias
-    uint256 txid;
-    CCoins coins;
-    vector<unsigned int> outs;
-    bool fRegistered = pcoinsTip->GetFirstMultisigWithPubKey(alias.GetPubKey(),txid,coins,outs);
+    CRegistration reg;
+    bool fRegistered = reg.Lookup(alias);
+      
+    // compile output 1
+    Object result;
+    result.push_back(Pair("alias", alias.ToJSON()));
     result.push_back(Pair("fRegistered", fRegistered));
-
-    if (fRegistered)
-      {
-	// compile output 2
-	result.push_back(Pair("txid",txid.ToString()));
-	result.push_back(Pair("coins", CoinsToJSON(coins)));
-	result.push_back(Pair("nRegistrations", (int)outs.size()));
-	for (unsigned int i=0; i<outs.size(); i++) {
-	  Object entry;
-	  unsigned int nOut = outs[i];
-	  entry.push_back(Pair("nOut", (int)nOut));
-	  CRegistration reg;
-	  if (!reg.SetByScript(coins.vout[nOut].scriptPubKey))
-	    throw runtime_error("RPC getregistrations: SetByScript failed.");
-	  entry.push_back(Pair("registration", reg.ToJSON()));
-	  entry.push_back(Pair("amount",ValueFromAmount(coins.vout[nOut].nValue)));
-	  entries.push_back(entry);
-	}
-	result.push_back(Pair("list", entries));
-      }
+    result.push_back(Pair("registration", reg.ToJSON()));
 
     return result;
 }

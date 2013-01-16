@@ -811,9 +811,9 @@ Value createmultisig(const Array& params, bool fHelp)
 
 Value registeralias(const Array& params, bool fHelp)
 {
-    if (fHelp || params.size() < 2 || params.size() > 3)
+    if (fHelp || params.size() < 1 || params.size() > 2)
     {
-        string msg = "registeralias <alias> <amount> [<certificate hash>]\n"
+        string msg = "registeralias <alias> [<certificate hash>]\n"
             "Creates a 2-to-redeem multi-signature output with explicit pubkeys (not P2SH) and commits a transaction.\n"
             "The pubkeys are: Hash(alias)*G, a pubkey from our pool"
             "If <certificate hash> is given then it is taken as a fake third pubkey (for which the privkey is unknown or even non-existent)"
@@ -831,40 +831,34 @@ Value registeralias(const Array& params, bool fHelp)
     if (!alias.SetName(params[0].get_str()))
       throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC getregistrations: alias may contain only characters a-z,A-Z,0-1,_,-, must start with letter and not end in _,-");
 
-    // set amount (and override)
-    int64 nAmount = AmountFromValue(params[1]);
-    if (nAmount > BTCPKI_MAXAMOUNT)
-      nAmount = BTCPKI_MAXAMOUNT;
-
     // get new key from keypool 
     CPubKey newKey;
     if (!pwalletMain->GetKeyFromPool(newKey, false))
         throw JSONRPCError(RPC_WALLET_KEYPOOL_RAN_OUT, "Error: Keypool ran out, please call keypoolrefill first");
 
     // get certificate hash
-    //    int nRequired(2);
     uint256 certhash;
-    if (params.size() > 2)
+    if (params.size() > 1)
     {
       //nRequired = 3;
-        if (!IsHex(params[2].get_str()))
+        if (!IsHex(params[1].get_str()))
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC registeralias: certhash not in hex format");
-	uint256 num(params[2].get_str());
+	uint256 num(params[1].get_str());
 	certhash = num;
         if (!certhash)
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC registeralias: certhash is invalid (zero)");
     }
 
-    // build registration
-    CRegistration reg(alias,newKey,certhash);
+    // build registration entry
+    CRegistrationEntry reg(alias,newKey,certhash);
        
     // Wallet comments
     CWalletTx wtx;
     wtx.mapValue["comment"] = "BTCPKI alias registration v";
     wtx.mapValue["comment"] += BTCPKI_VERSION;
-    wtx.mapValue["to"]      = alias.GetName();
+    wtx.mapValue["comment"] += ": " + alias.GetName();
 
-    // wallet locked?
+    // wallet passphrase
     if (pwalletMain->IsLocked())
         throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED, "Error: Please enter the wallet passphrase with walletpassphrase first.");
 
@@ -875,13 +869,12 @@ Value registeralias(const Array& params, bool fHelp)
 
     // compile output 1
     Object regResult;
-    regResult.push_back(Pair("registration", reg.ToJSON()));
+    regResult.push_back(Pair("regentry", reg.ToJSON()));
     regResult.push_back(Pair("alias", alias.ToJSON()));
     regResult.push_back(Pair("certhash", certhash.ToString()));
-    regResult.push_back(Pair("amount", ValueFromAmount(nAmount)));
 
     // sending
-    string strError = pwalletMain->SendMoney(reg.GetScript(), nAmount, wtx);
+    string strError = pwalletMain->SendMoney(reg.GetScript(), (int64) BTCPKI_REGAMOUNT, wtx);
     if (strError != "")
         throw JSONRPCError(RPC_WALLET_ERROR, strError);
 
@@ -897,10 +890,10 @@ Value registeralias(const Array& params, bool fHelp)
     regResult.push_back(Pair("outpoint", OutPointToJSON(outpt)));
 
     // set labels
-    pwalletMain->SetAddressBookName(reg.GetOwnerPubKey().GetID(), alias.addressbookname(OWNER));
-    if (params.size() > 2)
+    pwalletMain->SetAddressBookName(reg.GetOwnerPubKeyID(), alias.addressbookname(OWNER));
+    if (params.size() > 1)
     {
-      pwalletMain->SetAddressBookName(reg.GetCertPubKey().GetID(), alias.addressbookname(CERT));
+      pwalletMain->SetAddressBookName(reg.GetCertPubKeyID(), alias.addressbookname(CERT));
       pwalletMain->AddKey(reg.GetCertKey());
     }
 
@@ -908,6 +901,63 @@ Value registeralias(const Array& params, bool fHelp)
     pwalletMain->LockCoin(outpt);
 
     return regResult;
+}
+
+Value sendtoaliasowner(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() < 2 || params.size() > 3)
+        throw runtime_error(
+            "sendtoaddress <alias> <amount> [ticket]\n"
+	    "a registration for <alias> is looked up in the blockchain"
+	    "funds are sent to the owner pubkey"
+	    "if there are several registration entries then the first one is chosen"
+            "<amount> is a real and is rounded to the nearest 0.00000001"
+	    "<ticket> is a hex number, if given then funds are sent to ticket*ownerpubkey" 
+            + HelpRequiringPassphrase());
+
+    // testnet only?
+    if (BTCPKI_TESTNETONLY && !fTestNet)
+      throw runtime_error("RPC registeralias: disabled on mainnet");
+    
+    // build alias
+    CAlias alias;
+    if (!alias.SetName(params[0].get_str()))
+      throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC sendtoaliasowner: alias may contain only characters a-z,A-Z,0-1,_,-, must start with letter and not end in _,-");
+
+    // Amount
+    int64 nAmount = AmountFromValue(params[1]);
+
+    if (pwalletMain->IsLocked())
+        throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED, "Error: Please enter the wallet passphrase with walletpassphrase first.");
+
+    // Lookup
+    CRegistration reg;
+    if (!reg.Lookup(alias))
+      throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC sendtoaliasowner: alias not registered in the blockchain.");
+
+    // Wallet comments
+    CWalletTx wtx;
+    wtx.mapValue["to"]      = "BTCPKI alias: " + alias.GetName();
+
+    CBitcoinAddress address;
+    // Ticket
+    if (params.size() > 2 && params[2].type() != null_type && !params[2].get_str().empty())
+      {
+	string hexticket = params[2].get_str();
+	uint256 ticket;
+	ticket.SetHex(hexticket);
+	wtx.mapValue["comment"] = "Pay2Contract ticket: " + hexticket;
+        address = reg.GetEntry(0).GetDerivedOwnerAddr(ticket);
+      }
+    else
+      address = reg.GetEntry(0).GetOwnerAddr();
+      
+    // Sending
+    string strError = pwalletMain->SendMoneyToDestination(address.Get(), nAmount, wtx);
+    if (strError != "")
+        throw JSONRPCError(RPC_WALLET_ERROR, strError);
+
+    return wtx.GetHash().GetHex();
 }
 
 struct tallyitem

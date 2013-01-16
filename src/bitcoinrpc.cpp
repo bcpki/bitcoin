@@ -230,8 +230,6 @@ static const CRPCCommand vRPCCommands[] =
     { "sendmany",               &sendmany,               false,  false },
     { "addmultisigaddress",     &addmultisigaddress,     false,  false },
     { "createmultisig",         &createmultisig,         true,   true  },
-// BTCPKI
-    { "registeralias",          &registeralias,          true,   true  },
     { "getrawmempool",          &getrawmempool,          true,   false },
     { "getblock",               &getblock,               false,  false },
     { "getblockhash",           &getblockhash,           false,  false },
@@ -255,11 +253,13 @@ static const CRPCCommand vRPCCommands[] =
     { "signrawtransaction",     &signrawtransaction,     false,  false },
     { "sendrawtransaction",     &sendrawtransaction,     false,  false },
     { "gettxoutsetinfo",        &gettxoutsetinfo,        true,   false },
-// BTCPKI
-    { "getregistrations",       &getregistrations,       true,   false },
     { "gettxout",               &gettxout,               true,   false },
     { "lockunspent",            &lockunspent,            false,  false },
     { "listlockunspent",        &listlockunspent,        false,  false },
+// BTCPKI
+    { "registeralias",          &registeralias,          true,   true  },
+    { "sendtoaliasowner",       &sendtoaliasowner,       true,   true  },
+    { "getregistrations",       &getregistrations,       true,   false },
 };
 
 CRPCTable::CRPCTable()
@@ -1186,8 +1186,6 @@ Array RPCConvertValues(const std::string &strMethod, const std::vector<std::stri
     if (strMethod == "setgenerate"            && n > 0) ConvertTo<bool>(params[0]);
     if (strMethod == "setgenerate"            && n > 1) ConvertTo<boost::int64_t>(params[1]);
     if (strMethod == "sendtoaddress"          && n > 1) ConvertTo<double>(params[1]);
-//BTCPKI
-    if (strMethod == "registeralias"          && n > 1) ConvertTo<double>(params[1]);
     if (strMethod == "settxfee"               && n > 0) ConvertTo<double>(params[0]);
     if (strMethod == "getreceivedbyaddress"   && n > 1) ConvertTo<boost::int64_t>(params[1]);
     if (strMethod == "getreceivedbyaccount"   && n > 1) ConvertTo<boost::int64_t>(params[1]);
@@ -1226,6 +1224,9 @@ Array RPCConvertValues(const std::string &strMethod, const std::vector<std::stri
     if (strMethod == "lockunspent"            && n > 0) ConvertTo<bool>(params[0]);
     if (strMethod == "lockunspent"            && n > 1) ConvertTo<Array>(params[1]);
     if (strMethod == "importprivkey"          && n > 2) ConvertTo<bool>(params[2]);
+//BTCPKI
+    if (strMethod == "registeralias"          && n > 1) ConvertTo<double>(params[1]);
+    if (strMethod == "sendtoaliasowner"       && n > 1) ConvertTo<double>(params[1]);
 
     return params;
 }

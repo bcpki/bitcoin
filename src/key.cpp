@@ -209,21 +209,66 @@ bool CKey::SetPrivKey(const CPrivKey& vchPrivKey)
 }
 
 // BTCPKI
+CKey CKey::GetDerivedKey(const uint256& ticket, bool fCompressed) const
+{
+  CKey key;
+  CBigNum bn(ticket);
+
+  if (HasPrivKey())
+    { // privkey = privkey + ticket
+      if (!BN_add(&bn, &bn, EC_KEY_get0_private_key(pkey)))
+        throw key_error("CKey::DeriveKey() : BN_add failed");
+      if (!EC_KEY_set_private_key(key.pkey, &bn)) 
+        throw key_error("CKey::DeriveKey() : EC_KEY_set_private_key failed");
+      if (!EC_KEY_check_key(key.pkey))
+        throw key_error("CKey::DeriveKey() : EC_KEY_check_key failed");
+    }
+  else
+    { // add to pub key
+      // begin snippet from EC_KEY_regenerate_key
+      BN_CTX *ctx = NULL;
+      EC_POINT *pub_key = NULL;
+      const EC_GROUP *group = EC_KEY_get0_group(pkey);
+
+      if ((ctx = BN_CTX_new()) == NULL)
+        throw key_error("CKey::DeriveKey() : BN_CTX_new failed");
+
+      pub_key = EC_POINT_new(group);
+      if (pub_key == NULL)
+        throw key_error("CKey::DeriveKey() : EC_POINT_new failed");
+
+      if (!EC_POINT_mul(group, pub_key, &bn, NULL, NULL, ctx))
+        throw key_error("CKey::DeriveKey() : EC_POINT_mul failed");
+      // end snippet from EC_KEY_regenerate_key
+      // now pub_key = ticket * basepoint
+
+      //const EC_POINT *EC_KEY_get0_public_key(const EC_KEY *);
+      //int EC_POINT_add(const EC_GROUP *, EC_POINT *r, const EC_POINT *a, const EC_POINT *b, BN_CTX *);
+      if (!EC_POINT_add(group, pub_key, pub_key, EC_KEY_get0_public_key(pkey), ctx))
+        throw key_error("CKey::DeriveKey() : EC_POINT_add failed");
+
+      //int EC_KEY_set_public_key(EC_KEY *, const EC_POINT *);
+      if (!EC_KEY_set_public_key(key.pkey, pub_key)) 
+        throw key_error("CKey::DeriveKey() : EC_KEY_set_public_key failed");
+    };
+
+  key.fSet = true;
+  if (fCompressed)
+    key.SetCompressedPubKey();
+  return key;
+};
+
 bool CKey::SetSecretByNumber(uint256 num, bool fCompressed)
 {
     CBigNum N(num);
 
-    EC_KEY_free(pkey);
-    pkey = EC_KEY_new_by_curve_name(NID_secp256k1);
-    if (pkey == NULL)
-        throw key_error("CKey::SetSecret() : EC_KEY_new_by_curve_name failed");
-    BIGNUM *bn = &N;
-    if (!EC_KEY_regenerate_key(pkey,bn))
-    {
-        //BN_clear_free(bn);
+    //    EC_KEY_free(pkey);
+    //pkey = EC_KEY_new_by_curve_name(NID_secp256k1);
+    //if (pkey == NULL)
+    //    throw key_error("CKey::SetSecret() : EC_KEY_new_by_curve_name failed");
+    //BIGNUM *bn = &N;
+    if (!EC_KEY_regenerate_key(pkey,&N))
         throw key_error("CKey::SetSecret() : EC_KEY_regenerate_key failed");
-    }
-    // BN_clear_free(bn);
     fSet = true;
     if (fCompressed || fCompressedPubKey)
         SetCompressedPubKey();
