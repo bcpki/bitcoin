@@ -1,8 +1,0 @@
-package bitcoincert;
-
-message BitcoinSimpleCert {
-  repeated bytes ecdsa_pubkeys = 1;
-  optional bytes SSL_cert = 2;
-  optional string email = 3;
-  optional string url = 4;
-}

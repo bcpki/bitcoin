@@ -1,0 +1,75 @@
+package BTCert;
+
+message BitcoinCertSignature {
+  message SignatureAlgorithm {
+    enum SignatureAlgorithmType {
+      BTCPKI = 1;
+      PKCS1SHA1 = 2;
+    }
+    required SignatureAlgorithmType type = 1;
+    optional string version = 2;
+  }
+  required SignatureAlgorithm algorithm = 1;
+  optional bytes value = 2; 
+}
+
+message BitcoinCertData {
+  message Validity {
+    message Date {
+      enum DateType {
+        TIMESTAMP = 1;
+        BLOCKNUMBER = 2;
+      }
+      required DateType type = 1;
+      required int64 value = 2;
+    }
+    optional Date notbefore = 1;
+    optional Date notafter = 2;
+  }
+  message Contact {
+    enum Type {
+      EMAIL = 1;
+      URL = 2;
+      PHONE = 3;
+      POSTALADDR = 4;
+      IRC = 5;
+      }
+    required Type type = 1;
+    required string value = 2;
+  }
+  message PublicKey {
+    enum Usage {
+      PAYMENT = 1; 	     
+      DERIVE = 2;
+      SSLTLS = 3;
+      ORDER = 4;
+      CUSTOMERRELATION = 5;
+    }
+    message Algorithm {
+      enum Type {
+        BTCPKISINGLE = 1;
+        BTCPKIMULTI = 2;
+        BTCPKISCRIPT = 3;
+        PKCS1 = 100;
+      }
+      required Type type = 1;
+      optional string version = 2;
+    }
+    optional Usage usage = 1;
+    required Algorithm algorithm = 2;
+    required bytes value = 3;
+  }
+  required string version = 1 [default = "0.2"];
+  optional string subjectname = 2;
+  optional Validity validity = 3;
+  repeated Contact contacts = 4;
+  repeated PublicKey paymentkeys = 5;
+  repeated PublicKey derivationkeys = 6;
+  repeated PublicKey otherusagekeys = 7;
+}
+
+message BitcoinCert {
+  required string version = 1 [default = "0.2"];
+  required BitcoinCertData data = 2;
+  repeated BitcoinCertSignature signatures = 3;
+}

@@ -1,0 +1,3 @@
+protoc --python_out=. btcert.proto 
+./mycert.py
+
