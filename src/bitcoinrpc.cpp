@@ -260,6 +260,7 @@ static const CRPCCommand vRPCCommands[] =
     { "registeralias",          &registeralias,          true,   true  },
     { "sendtoaliasowner",       &sendtoaliasowner,       true,   true  },
     { "getregistrations",       &getregistrations,       true,   false },
+    { "importticket",           &importticket,           false,  false },
 };
 
 CRPCTable::CRPCTable()
@@ -1225,8 +1226,8 @@ Array RPCConvertValues(const std::string &strMethod, const std::vector<std::stri
     if (strMethod == "lockunspent"            && n > 1) ConvertTo<Array>(params[1]);
     if (strMethod == "importprivkey"          && n > 2) ConvertTo<bool>(params[2]);
 //BTCPKI
-    if (strMethod == "registeralias"          && n > 1) ConvertTo<double>(params[1]);
     if (strMethod == "sendtoaliasowner"       && n > 1) ConvertTo<double>(params[1]);
+    if (strMethod == "importticket"           && n > 2) ConvertTo<bool>(params[3]);
 
     return params;
 }

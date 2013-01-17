@@ -32,6 +32,62 @@ public:
     }
 };
 
+Value importticket(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() < 1 || params.size() > 4)
+        throw runtime_error(
+            "importticket <bitcoinaddr> <ticket> [label] [rescan=true]\n"
+            "ticket is in hex format\n"
+            "Adds a private key (as returned by dumpprivkey) to your wallet.");
+
+    string strAddress = params[0].get_str();
+    string hexTicket = params[1].get_str();
+
+    // Whether to perform rescan after import
+    bool fRescan = true;
+    if (params.size() > 3)
+        fRescan = params[3].get_bool();
+
+    // find bitcoinaddr
+    CBitcoinAddress address;
+    if (!address.SetString(strAddress))
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Bitcoin address");
+    CKeyID keyID;
+    if (!address.GetKeyID(keyID))
+        throw JSONRPCError(RPC_TYPE_ERROR, "Address does not refer to a key");
+    CKey key;
+    if (!pwalletMain->GetKey(keyID, key))
+        throw JSONRPCError(RPC_WALLET_ERROR, "Key for address " + strAddress + " not in keystore");
+    if (!key.HasPrivKey())
+        throw JSONRPCError(RPC_WALLET_ERROR, "Private key for address " + strAddress + " is not known");
+
+    uint256 ticket;
+    ticket.SetHex(hexTicket);
+    CKey newkey = key.GetDerivedKey(ticket);
+      
+    CKeyID vchAddress = newkey.GetPubKey().GetID();
+    {
+        LOCK2(cs_main, pwalletMain->cs_wallet);
+
+        string strLabel = pwalletMain->mapAddressBook[vchAddress] + "<" + hexTicket + ">"; 
+	if (params.size() > 2)
+	  strLabel += ": " + params[2].get_str();
+	
+        pwalletMain->MarkDirty();
+        pwalletMain->SetAddressBookName(vchAddress, strLabel);
+
+        if (!pwalletMain->AddKey(newkey))
+            throw JSONRPCError(RPC_WALLET_ERROR, "Error adding derived key to wallet");
+	
+        if (fRescan) {
+            pwalletMain->ScanForWalletTransactions(pindexGenesisBlock, true);
+            pwalletMain->ReacceptWalletTransactions();
+        }
+    }
+
+    return Value::null;
+}
+
 Value importprivkey(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() < 1 || params.size() > 3)

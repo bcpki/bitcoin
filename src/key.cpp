@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <map>
+#include <iostream> // debug
 
 #include <openssl/ecdsa.h>
 #include <openssl/obj_mac.h>
@@ -214,24 +215,35 @@ CKey CKey::GetDerivedKey(const uint256& ticket, bool fCompressed) const
   CKey key;
   CBigNum bn(ticket);
 
+  BN_CTX *ctx = NULL;
+  if ((ctx = BN_CTX_new()) == NULL)
+    throw key_error("CKey::DeriveKey() : BN_CTX_new failed");
+
   if (HasPrivKey())
     { // privkey = privkey + ticket
-      if (!BN_add(&bn, &bn, EC_KEY_get0_private_key(pkey)))
-        throw key_error("CKey::DeriveKey() : BN_add failed");
-      if (!EC_KEY_set_private_key(key.pkey, &bn)) 
-        throw key_error("CKey::DeriveKey() : EC_KEY_set_private_key failed");
+      std::cout << "privkey + ticket";
+      // snippet from ECDSA_SIG_recover_key_GFp
+      // TODO check this again
+      BIGNUM *order = NULL;
+      BN_CTX_start(ctx);
+      order = BN_CTX_get(ctx);
+      if (!EC_GROUP_get_order(EC_KEY_get0_group(pkey), order, ctx)) 
+      	throw key_error("CKey::DeriveKey() : EC_GROUP_get_order failed");
+      if (!BN_mod_add(&bn, &bn, EC_KEY_get0_private_key(pkey), order, ctx))
+      	throw key_error("CKey::DeriveKey() : BN_add failed");
+      if (!EC_KEY_regenerate_key(key.pkey,&bn)) // sets private AND public key
+        throw key_error("CKey::SetSecret() : EC_KEY_regenerate_key failed");
+      //      if (!EC_KEY_set_private_key(key.pkey, &bn)) 
+      //  throw key_error("CKey::DeriveKey() : EC_KEY_set_private_key failed");
       if (!EC_KEY_check_key(key.pkey))
-        throw key_error("CKey::DeriveKey() : EC_KEY_check_key failed");
+	throw key_error("CKey::DeriveKey() : EC_KEY_check_key failed");
     }
   else
     { // add to pub key
+      std::cout << "pubkey + ticket*G";
       // begin snippet from EC_KEY_regenerate_key
-      BN_CTX *ctx = NULL;
       EC_POINT *pub_key = NULL;
       const EC_GROUP *group = EC_KEY_get0_group(pkey);
-
-      if ((ctx = BN_CTX_new()) == NULL)
-        throw key_error("CKey::DeriveKey() : BN_CTX_new failed");
 
       pub_key = EC_POINT_new(group);
       if (pub_key == NULL)
