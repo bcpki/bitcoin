@@ -671,6 +671,7 @@ bool IsMine(const CKeyStore& keystore, const CScript& scriptPubKey);
 bool IsMine(const CKeyStore& keystore, const CTxDestination &dest);
 bool ExtractDestination(const CScript& scriptPubKey, CTxDestination& addressRet);
 bool ExtractDestinations(const CScript& scriptPubKey, txnouttype& typeRet, std::vector<CTxDestination>& addressRet, int& nRequiredRet);
+bool ExtractPubKeys(const CScript& scriptPubKey, std::vector<CPubKey>& pubkeyRet);
 bool IsMultisigWithPubKey(const CScript& scriptPubKey, const CPubKey& searchKey); 
 bool ExtractPubKeysFromMultisig(const CScript& scriptPubKey, std::vector<CPubKey>& results);
 bool SignSignature(const CKeyStore& keystore, const CScript& fromPubKey, CTransaction& txTo, unsigned int nIn, int nHashType=SIGHASH_ALL);

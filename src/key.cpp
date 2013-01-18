@@ -225,12 +225,14 @@ CKey CKey::GetDerivedKey(const uint256& ticket, bool fCompressed) const
       // snippet from ECDSA_SIG_recover_key_GFp
       // TODO check this again
       BIGNUM *order = NULL;
-      BN_CTX_start(ctx);
-      order = BN_CTX_get(ctx);
+      if ((order = BN_new()) == NULL)
+	throw key_error("CKey::DeriveKey() : BN_new failed");
+      //      BN_CTX_start(ctx);
+      //order = BN_CTX_get(ctx);
       if (!EC_GROUP_get_order(EC_KEY_get0_group(pkey), order, ctx)) 
       	throw key_error("CKey::DeriveKey() : EC_GROUP_get_order failed");
       if (!BN_mod_add(&bn, &bn, EC_KEY_get0_private_key(pkey), order, ctx))
-      	throw key_error("CKey::DeriveKey() : BN_add failed");
+      	throw key_error("CKey::DeriveKey() : BN_mod_add failed");
       if (!EC_KEY_regenerate_key(key.pkey,&bn)) // sets private AND public key
         throw key_error("CKey::SetSecret() : EC_KEY_regenerate_key failed");
       //      if (!EC_KEY_set_private_key(key.pkey, &bn)) 

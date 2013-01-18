@@ -862,10 +862,12 @@ Value registeralias(const Array& params, bool fHelp)
     if (pwalletMain->IsLocked())
         throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED, "Error: Please enter the wallet passphrase with walletpassphrase first.");
 
-    // check if alias address is new, set labels
-    pwalletMain->SetAddressBookName(alias.GetPubKeyID(), alias.addressbookname(ADDR));
-    if (!pwalletMain->AddKey(alias.GetKey()))
-        throw JSONRPCError(RPC_WALLET_ERROR, "Error adding alias address to wallet. Already registered? Not sending.");
+    // set labels
+    // pwalletMain->SetAddressBookName(alias.GetPubKeyID(), alias.addressbookname(ADDR));
+    // disabled: check if alias address is new
+    // disabled: add alias priv key to wallet (this prevents accidentally revoking the registration because the output remains unspendable)
+    // if (!pwalletMain->AddKey(alias.GetKey()))
+    //   throw JSONRPCError(RPC_WALLET_ERROR, "Error adding alias address to wallet. Already registered? Not sending.");
 
     // compile output 1
     Object regResult;
@@ -898,7 +900,10 @@ Value registeralias(const Array& params, bool fHelp)
     }
 
     // lock outpoint
+    /* locking coins works only temporarily, no across restarts
+       we lock the coin permanently by NOT inserting the alias privkey
     pwalletMain->LockCoin(outpt);
+    */
 
     return regResult;
 }
@@ -907,7 +912,7 @@ Value sendtoaliasowner(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() < 2 || params.size() > 3)
         throw runtime_error(
-            "sendtoaddress <alias> <amount> [ticket]\n"
+            "sendtoaliasowner <alias> <amount> [ticket]\n"
 	    "a registration for <alias> is looked up in the blockchain"
 	    "funds are sent to the owner pubkey"
 	    "if there are several registration entries then the first one is chosen"

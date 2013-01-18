@@ -1,0 +1,87 @@
+- we want to start a project and set up a mechanism for receiving funds for that project from supporters
+- this shall include the possibility to receive funds directly to MULTISIG destinations 
+  (instead of receiving them on SINGLESIG destinations and forwarding them to MULTISIG ourselves)
+- we decide on a name for our project: fooproject
+- we create in our bitcoind (running offline) a new account 'fooproject'
+- we choose a new key in account 'fooproject', label it with 'fooproject:receive-base single' and extract the pubkey (unhashed, not the address)
+  this pubkey will be called "payment single-pubkey" in the following
+- we choose two more new keys in account 'fooproject', label them with 'fooproject:receive-base multi i' (i=1,2) and extract their pubkeys (unhashed, not the address)
+  these pubkeys will be called "payment multi-pubkeys" in the following
+- we create a raw certificate fooproject.raw according to the specification btcert.proto
+  for this we enter the payment single-pubkey into one field, and all payment multi-pubkeys in another field
+  additional fields (optional) can contain: a descriptive long name for our project, a url, contact email etc.
+  there are several possible ways to create fooproject.raw
+  - a interactive python script ask for the fields
+  - a "btcert-creator" online service can be used with wget or in a browser 
+    (note that this is not security sensitive, so an online service is acceptable)
+  - a python script parses a text representation of the cert that we edit in JSON/YAML/etc format
+    (several implementions for a JSON parser are available for java)
+- we pretty print fooproject.crt to verify it contains the correct payment pubkeys (single and multi)
+- we "sign" the raw certificate "in the blockchain" under the name 'fooproject'
+  - start a patched bitcoind (running online with little funds, <=1BTC) 
+  - sign.py fooproject fooproject.raw # does the following
+    - ./bitcoind sign fooproject `sha256sum fooproject.raw`  # RPC sign was formerly called registeralias, does the following:
+    - pick a new key from the keypool and label it with 'owner:fooproject'
+      this pubkey will be called "owner pubkey" in the following
+    - send 0.5BTC to a 3-of-3 MULTISIG destination, one pubkey being ownerpubkey, the other two derived from hashes of string fooproject and fooproject.raw
+      (0.5 BTC is 100x the current transaction fee, this requirement protects agains dictionary attack)
+    - wrap both the raw cert and the string 'fooproject' into a "signed cert" file fooproject.crt
+      (note that ownerpubkey does not appear in the cert, it's sole purpose is revocation when the project ends)
+  - wait for 6 confirmations
+  - ./bitcoind verify fooproject `sha256sum fooproject.raw` # returns ownerpubkey and number of confirmations
+    this is a variation of the formerly used RPC getregistrations
+    we check by this if our signature was successful, does the following
+    - lookup first unspent output with hash('fooproject') appearing as the first pubkey in a MULTISIG scriptPubKey 
+    - compare `sha256sum fooproject.raw` with the third pubkey in that scriptPubKey 
+    - return the second pubkey in that scriptPubKey 
+- we upload fooproject.crt to a "cert server"
+- we get going with the project
+
+======
+
+- someone has heard of the project and decides he wants to donate
+- he is sure that the project is registered under the name 'fooproject'
+  when the project name is being passed around orally note that:
+  - the name normalization prevents that someone else can register foproject, foo-project, foo_project, Fooproject, etc
+    (because all these have the same normalization)
+  when the project name is being type-copied note that:
+  - the name normalization prevents that someone else can register f00pr0ject, etc (same for 1=l=I)
+    (because all these have the same normalization)
+- he downloads fooproject.crt from a cert server
+- he "verifies" the signature on the certificate "in the blockchain"
+  - start a patched bitcoind (no funds required, having ultraprune data available suffices)
+  - verify.py fooproject.crt # does the following
+    - unwrap fooproject.crt into fooproject.raw and the string 'fooproject'
+    - ./bitcoind verify fooproject `sha256sum fooproject.raw`  # explanation see above, returns ownerpubkey and number of confirmations
+- optional: he extracts url, contact info, etc from fooproject.crt and does further research on the project
+- variant 1 (directly to single-pubkey):
+  - ./bitcoind sendtocertsingle fooproject.raw amount // not yet implemented
+    alternatively: ./bitcoind sendtocertsingle fooproject.crt amount // has verification step built-in, possible for all variants below
+- variant 2 (directly to multi-pubkey):
+  - ./bitcoind sendtocertmulti fooproject.raw amount // not yet implemented, outputs to MULTISIG
+- variant 3 (pay-to-contract with requested ticket, single- or multi-pubkey):
+  - click donation button on url and receive a "ticket" (128bit number, hex or base58 encoded)
+  - do either one of the following:
+    - ./bitcoind sendtocertsingle fooproject.raw amount ticket // send to derived address single-pubkey[ticket]  
+    - ./bitcoind sendtocertmulti fooproject.raw amount ticket // send to MULTISIG output of derived addresses multi-pubkey1[ticket], multi-pubkey2[ticket]    
+- variant 4 (pay-to-contract with self-generated ticket, single- or multi-pubkey):
+  - generate own random "ticket" (128bit number, hex or base58 encoded)
+  - do either one of the following:
+    - ./bitcoind sendtocertsingle fooproject.raw amount ticket // send to derived address single-pubkey[ticket]  
+    - ./bitcoind sendtocertmulti fooproject.raw amount ticket // send to MULTISIG output of derived addresses multi-pubkey1[ticket], multi-pubkey2[ticket]    
+  - submit ticket to contact (email or url)
+
+ ====
+
+- we have received a donation for a certain "ticket"
+- ./bitcoind importticket fooproject ticket # does the following
+  - get all keys from account 'fooproject' with label 'fooproject: receive-base ...', for each of them
+    - add key[ticket] (derived key) to the keypool and to account 'fooproject'
+    - label key[ticket] with 'fooproject: receive-base<ticket>' 
+  - do a wallet rescan
+
+====
+
+the concept is an extension of firstbits that allows
+- arbitrary names
+- multisigs 

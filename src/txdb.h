@@ -24,7 +24,7 @@ public:
     bool BatchWrite(const std::map<uint256, CCoins> &mapCoins, CBlockIndex *pindex);
     bool GetStats(CCoinsStats &stats);
     bool GetFirstMultisigWithPubKey(const CPubKey& searchKey, uint256& txRet, CCoins& coinsRet, std::vector<unsigned int>& outRet);
-    bool IterateThroughCoins(boost::function<bool (const uint256&, const CCoins&)> f);
+    bool GetFirstMatch(boost::function<bool (const CCoins)> f, uint256& txRet);
 };
 
 /** Access to the block database (blktree/) */

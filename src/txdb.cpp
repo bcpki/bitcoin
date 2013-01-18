@@ -110,7 +110,7 @@ bool CBlockTreeDB::ReadLastBlockFile(int &nFile) {
     return Read('l', nFile);
 }
 
-bool CCoinsViewDB::IterateThroughCoins(boost::function<bool (const uint256&, const CCoins&)> f) { 
+bool CCoinsViewDB::GetFirstMatch(boost::function<bool (const CCoins)> f, uint256& txRet) { 
     leveldb::Iterator *pcursor = db.NewIterator();
     pcursor->SeekToFirst();
 
@@ -130,8 +130,17 @@ bool CCoinsViewDB::IterateThroughCoins(boost::function<bool (const uint256&, con
                 uint256 txhash;
                 ssKey >> txhash;
 
-		if (f(txhash,coins))
-		  break; // while (pursor->Valid())
+		if ((height > 0) && (coins.nHeight > height))
+		  {
+		    pcursor->Next();
+		    continue; // while (pursor->Valid())
+		  }
+
+		if (f(coins))
+		  {
+		    txRet = txhash;
+		    height = coins.nHeight;
+		  }
             }
             pcursor->Next();
         } catch (std::exception &e) {

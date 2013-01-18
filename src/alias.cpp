@@ -87,6 +87,51 @@ string CAlias::addressbookname(pubkey_type type) const {
     }
 }
 
+bool CAlias::AppearsInScript(const CScript script) const {
+  txnouttype typeRet = TX_NONSTANDARD;
+  vector<vector<unsigned char> > vSolutions;
+  if (!Solver(script, typeRet, vSolutions))
+    return false;
+
+  return ((typeRet == TX_MULTISIG) && (CPubKey(vSolutions[1]) == key.GetPubKey()));
+}
+
+bool CAlias::AppearsInCoins(const CCoins coins) const {
+  BOOST_FOREACH(const CTxOut &out, coins.vout) {
+    if (AppearsInScript(out.scriptPubKey) && (out.nValue >= BTCPKI_REGAMOUNT))
+      return true;
+  }
+  return false;
+}
+
+bool CAlias::Lookup(vector<CPubKey>& sigs) const {
+  boost::function<bool (const CCoins)> func;
+  boost::function<bool (const CAlias* first, const CCoins)> mem;
+  mem = std::mem_fun(&CAlias::AppearsInCoins);
+  func = std::bind1st(mem, this);
+  uint256 txid;
+  if (!pcoinsTip->GetFirstMatch(func, txid))
+    return false;
+  CCoins coins;
+  pcoinsTip->GetCoins(txid, coins);
+  BOOST_FOREACH(const CTxOut &out, coins.vout) {
+    ExtractPubKeysFromMultisig(out.scriptPubKey,sigs);
+  }
+  return true;
+}
+
+bool CAlias::Verify(CPubKey sig) const {
+  vector<CPubKey> sigs;
+  if (!Lookup(sigs))
+    return false;
+  BOOST_FOREACH(const CPubKey &s, sigs) {
+    if (sig == s)
+      return true;
+  }
+
+  return false;
+}
+  
 Object CAlias::ToJSON() const {
   Object result;
   result.push_back(Pair("str", name));
@@ -169,9 +214,9 @@ Object CRegistrationEntry::ToJSON() const {
 /* CRegistration */
 
 bool CRegistration::Lookup(const CAlias& alias) {
+
   CCoins coins;
   fBacked = pcoinsTip->GetFirstMultisigWithPubKey(alias.GetPubKey(),txid,coins,outs);
-  // TODO pass function argument and check if amount >BTCPKI_REGAMOUNT
   if (!fBacked)
     return false;
 
@@ -257,3 +302,5 @@ Object OutPointToJSON(const COutPoint& outpt) {
   result.push_back(Pair("n", (int)outpt.n));
   return result;
 };
+
+

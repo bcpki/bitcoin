@@ -29,6 +29,8 @@ using namespace std;
 
 enum pubkey_type { ADDR, OWNER, CERT };
 
+class CRegistration;
+
 class CAlias 
 {
     bool check(const string& name);
@@ -57,6 +59,10 @@ public:
     //    CBigNum GetBignum() const { return num; };
     // CSecret GetSecret() const;
     string addressbookname(const pubkey_type type) const;
+    bool AppearsInCoins(const CCoins coins) const;
+    bool AppearsInScript(const CScript script) const;
+    bool Lookup(vector<CPubKey>& reg) const;
+    bool Verify(CPubKey sig) const;
     Object ToJSON() const;
 };
 
@@ -119,9 +125,12 @@ public:
   unsigned int GetNEntries() const { return vreg.size(); };
   CRegistrationEntry GetEntry(unsigned int n) const { return vreg[n]; };
   Object ToJSON() const;
+
+  friend class CAlias;
 };
 
 Object KeyToJSON(const CKey& key);
 Object ScriptToJSON(const CScript& script);
 Object CoinsToJSON(const CCoins& coins);
 Object OutPointToJSON(const COutPoint& outpt);
+
