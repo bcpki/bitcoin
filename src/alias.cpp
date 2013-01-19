@@ -10,6 +10,23 @@
 
 using namespace std;
 
+/* CValue */
+
+void CValue::init(const uint256& val) {
+  value = val;
+  key.SetSecretByNumber(val);
+}
+
+CValue::CValue(const string& str) {
+    if (!IsHex(str))
+      throw runtime_error("CValue::CValue:: hash not in hex format");
+
+    if (str.size() > 64)
+      throw runtime_error("CValue::CValue:: hex str is more than 64 characters (32 bytes)");
+
+    init(uint256(str));
+}
+
 /* CAlias */
 
 bool CAlias::check(const string& str) {
@@ -104,29 +121,32 @@ bool CAlias::AppearsInCoins(const CCoins coins) const {
   return false;
 }
 
-bool CAlias::Lookup(vector<CPubKey>& sigs) const {
+int CAlias::Lookup(vector<CPubKey>& sigs) const {
   boost::function<bool (const CCoins)> func;
   boost::function<bool (const CAlias* first, const CCoins)> mem;
   mem = std::mem_fun(&CAlias::AppearsInCoins);
   func = std::bind1st(mem, this);
   uint256 txid;
   if (!pcoinsTip->GetFirstMatch(func, txid))
-    return false;
+    return -1;
   CCoins coins;
   pcoinsTip->GetCoins(txid, coins);
+  sigs.clear();
   BOOST_FOREACH(const CTxOut &out, coins.vout) {
-    ExtractPubKeysFromMultisig(out.scriptPubKey,sigs);
+    ExtractPubKeysFromMultisig(out.scriptPubKey,sigs); //appends found pubkeys to sigs vector
   }
-  return true;
+  return coins.nHeight;
 }
 
-bool CAlias::Verify(CPubKey sig) const {
+bool CAlias::Verify(const CValue& sig, int& nHeight) const {
   vector<CPubKey> sigs;
-  if (!Lookup(sigs))
-    return false;
-  BOOST_FOREACH(const CPubKey &s, sigs) {
-    if (sig == s)
-      return true;
+  nHeight = Lookup(sigs);
+
+  if (nHeight >= 0) {
+    BOOST_FOREACH(const CPubKey &s, sigs) {
+      if (s == sig.GetPubKey())
+	return true;
+    }
   }
 
   return false;

@@ -3,7 +3,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <map>
-#include <iostream> // debug
 
 #include <openssl/ecdsa.h>
 #include <openssl/obj_mac.h>
@@ -221,7 +220,6 @@ CKey CKey::GetDerivedKey(const uint256& ticket, bool fCompressed) const
 
   if (HasPrivKey())
     { // privkey = privkey + ticket
-      std::cout << "privkey + ticket";
       // snippet from ECDSA_SIG_recover_key_GFp
       // TODO check this again
       BIGNUM *order = NULL;
@@ -242,7 +240,6 @@ CKey CKey::GetDerivedKey(const uint256& ticket, bool fCompressed) const
     }
   else
     { // add to pub key
-      std::cout << "pubkey + ticket*G";
       // begin snippet from EC_KEY_regenerate_key
       EC_POINT *pub_key = NULL;
       const EC_GROUP *group = EC_KEY_get0_group(pkey);

@@ -260,6 +260,7 @@ static const CRPCCommand vRPCCommands[] =
     { "registeralias",          &registeralias,          true,   true  },
     { "sendtoaliasowner",       &sendtoaliasowner,       true,   true  },
     { "getregistrations",       &getregistrations,       true,   false },
+    { "btcpkiverify",           &btcpkiverify,           true,   false },
     { "importticket",           &importticket,           false,  false },
 };
 

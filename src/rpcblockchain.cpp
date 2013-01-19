@@ -181,6 +181,36 @@ Value gettxoutsetinfo(const Array& params, bool fHelp)
     return ret;
 }
 
+Value btcpkiverify(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() > 2 || params.size() < 2)
+        throw runtime_error(
+            "btcpkiverify <alias> <hash>\n"
+            "verify a blockchain signature under name <alias>.\n"
+	    "<hash> is in hex format 160 or 256 bit.\n"
+	    "[...]\n");
+
+    // build alias
+    CAlias alias;
+    if (!alias.SetName(params[0].get_str()))
+      throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC getregistrations: alias may contain only characters a-z,A-Z,0-1,_,-, must start with letter and not end in _,-");
+
+    int nHeight;
+    bool fRegistered = alias.Verify(CValue(params[1].get_str()),nHeight);
+
+    // compile output
+    Object result;
+    result.push_back(Pair("alias", alias.ToJSON()));
+    result.push_back(Pair("nHeight", nHeight));
+    result.push_back(Pair("fRegistered", fRegistered));
+    if (nHeight > 0)
+      {
+        result.push_back(Pair("confirmations", pcoinsTip->GetBestBlock()->nHeight - nHeight + 1));
+      }
+      
+    return result;
+}
+
 Value getregistrations(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() > 1 || params.size() < 1)

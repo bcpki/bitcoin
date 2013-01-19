@@ -7,16 +7,7 @@
 
 #include <boost/assign/list_of.hpp>
 
-/*
-#include "wallet.h"
-#include "walletdb.h"
-#include "bitcoinrpc.h"
-#include "init.h"
-
-using namespace std;
-using namespace boost;
-using namespace boost::assign;
-*/
+//TODO remove using namespace from .h
 using namespace json_spirit;
 
 #define BTCPKI_ALIAS "alias"
@@ -30,6 +21,26 @@ using namespace std;
 enum pubkey_type { ADDR, OWNER, CERT };
 
 class CRegistration;
+
+class CValue
+{
+  uint256 value;
+  CKey key;
+
+  void init(const uint256& val);
+
+ public:
+  CValue(const uint256& val) { init(val); };
+  CValue(const string& str);
+
+  uint256 GetValue() const { return value; };
+  string GetHex() const { return value.ToString(); };
+  
+  CKey GetKey() const { return key; };
+  CPubKey GetPubKey() const { return key.GetPubKey(); };
+  string GetPubKeyHex() const { return HexStr(key.GetPubKey().Raw()); };
+  CKeyID GetPubKeyID() const { return key.GetPubKey().GetID(); };
+};
 
 class CAlias 
 {
@@ -61,8 +72,8 @@ public:
     string addressbookname(const pubkey_type type) const;
     bool AppearsInCoins(const CCoins coins) const;
     bool AppearsInScript(const CScript script) const;
-    bool Lookup(vector<CPubKey>& reg) const;
-    bool Verify(CPubKey sig) const;
+    int Lookup(vector<CPubKey>& reg) const;
+    bool Verify(const CValue& sig, int& nHeight) const;
     Object ToJSON() const;
 };
 

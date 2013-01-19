@@ -1654,14 +1654,19 @@ bool ExtractPubKeysFromMultisig(const CScript& scriptPubKey, vector<CPubKey>& re
         return false;
 
     if ((typeRet != TX_MULTISIG))
-        return false;
+      return false;
 
-    //nRequired = vSolutions.front()[0];
+    if (vSolutions.front()[0] < 2) // filter out 1-to-redeem
+      return false;
+
+    /* deprecated, instead we take only the first pubkey 
     for (unsigned int i = 1; i < vSolutions.size()-1; i++)
     {
         CPubKey pubkey(vSolutions[i]);
         results.push_back(pubkey);
     }
+    */
+    results.push_back(vSolutions[1]);
 
     return true;
 }
