@@ -1904,7 +1904,7 @@ public:
 
     // PKI-BTC
     // Get alias registrations from the unspent transaction output set
-    virtual bool GetFirstMultisigWithPubKey(const CPubKey& searchKey, uint256& txRet, CCoins& coinsRet, std::vector<unsigned int>& outRet);
+    // deprecated virtual bool GetFirstMultisigWithPubKey(const CPubKey& searchKey, uint256& txRet, CCoins& coinsRet, std::vector<unsigned int>& outRet);
     virtual bool GetFirstMatch(boost::function<bool (const CCoins)> f, uint256& txRet);
 
     // As we use CCoinsViews polymorphically, have a virtual destructor
@@ -1927,7 +1927,7 @@ public:
     void SetBackend(CCoinsView &viewIn);
     bool BatchWrite(const std::map<uint256, CCoins> &mapCoins, CBlockIndex *pindex);
     bool GetStats(CCoinsStats &stats);
-    bool GetFirstMultisigWithPubKey(const CPubKey& searchKey, uint256& txRet, CCoins& coinsRet, std::vector<unsigned int>& outRet);
+    // deprecated bool GetFirstMultisigWithPubKey(const CPubKey& searchKey, uint256& txRet, CCoins& coinsRet, std::vector<unsigned int>& outRet);
     bool GetFirstMatch(boost::function<bool (const CCoins)> f, uint256& txRet);
 };
 

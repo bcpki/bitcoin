@@ -258,6 +258,7 @@ static const CRPCCommand vRPCCommands[] =
     { "listlockunspent",        &listlockunspent,        false,  false },
 // BTCPKI
     { "registeralias",          &registeralias,          true,   true  },
+    { "btcpkisign",             &btcpkisign,             true,   true  },
     { "sendtoaliasowner",       &sendtoaliasowner,       true,   true  },
     { "getregistrations",       &getregistrations,       true,   false },
     { "btcpkiverify",           &btcpkiverify,           true,   false },

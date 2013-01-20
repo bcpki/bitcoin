@@ -89,8 +89,6 @@ Value getinfo(const Array& params, bool fHelp)
     return obj;
 }
 
-
-
 Value getnewaddress(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() > 1)
@@ -809,8 +807,89 @@ Value createmultisig(const Array& params, bool fHelp)
     return result;
 }
 
-Value registeralias(const Array& params, bool fHelp)
+Value btcpkisign(const Array& params, bool fHelp)
 {
+    if (fHelp || params.size() < 1)
+    {
+      string msg = "btcpkisign <alias> [<value> ...]\n"
+	"btcpkisign <alias> [<value> ...]\n"
+	"Suppose n values are given: value1, ..., valuen. n=0 is possible.\n"
+	"Creates and commits a transaction with n+1 explit (i.e. non-P2SH) multi-signature outputs (plus one regular output for change, if applicable).\n"
+	"Each output has the form: 2 <value-pubkey> <owner-pubkey> 2 OP_CHECKMULTISIG, where owner-pubkey is new from the keypool.\n"
+	"The value-pubkeys are derived from alias, value1, ..., valuen.\n"
+	"The owner-pubkeys are currently all equal and taken fresh from the keypool. (Later, there will be an option to provide them on the commandline.)\n"
+	"The amounts are chosen automatically (currently 0.05 BTC per output)\n";
+      
+      throw runtime_error(msg);
+    }
+    // testnet only?
+    if (BTCPKI_TESTNETONLY && !fTestNet)
+      throw runtime_error("RPC registeralias: disabled on mainnet");
+    
+    Object result;
+
+    // build alias
+    CAlias alias(params[0].get_str());
+    if (!alias.IsSet())
+      throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC getregistrations: alias may contain only characters a-z,A-Z,0-1,_,-, must start with letter and not end in _,-");
+    result.push_back(Pair("alias", alias.ToJSON()));
+
+    // get new key from keypool 
+    CPubKey owner1;
+    if (!pwalletMain->GetKeyFromPool(owner1, false))
+        throw JSONRPCError(RPC_WALLET_KEYPOOL_RAN_OUT, "Error: Keypool ran out, please call keypoolrefill first");
+    pwalletMain->SetAddressBookName(owner1.GetID(), alias.addressbookname(OWNER));
+
+    // collect owners
+    vector<CPubKey> owners (1,owner1); 
+    Array ownerArray;
+    BOOST_FOREACH(const CPubKey owner, owners)
+      ownerArray.push_back(PubKeyToJSON(owner));
+    result.push_back(Pair("owners", ownerArray));
+
+    // collect values including alias
+    vector<CBcValue> values (1,alias);
+    for(unsigned int i=1; i<params.size(); i++)
+      values.push_back(CBcValue(params[i].get_str()));
+
+    // build output scripts
+    vector<pair<CScript,int64> > vecSend;
+    Array outs;
+    BOOST_FOREACH(const CBcValue val, values)
+      {
+	pair<CScript,int64> out (val.MakeScript(owners),100*50000);
+	vecSend.push_back(out);
+	Object entry;
+	entry.push_back(Pair("value",val.ToJSON()));
+	entry.push_back(Pair("script",ScriptToJSON(out.first)));
+	entry.push_back(Pair("nAmount",100*50000));
+	outs.push_back(entry);
+      }
+    result.push_back(Pair("outs", outs));
+
+    // Wallet comments
+    CWalletTx wtx;
+    wtx.mapValue["comment"] = "BTCPKI alias registration v";
+    wtx.mapValue["comment"] += BTCPKI_VERSION;
+    wtx.mapValue["comment"] += ": " + alias.GetName();
+
+    // create transaction
+    CReserveKey keyChange(pwalletMain);
+    int64 nFeeRequired;
+    if (!pwalletMain->CreateTransaction(vecSend,wtx,keyChange,nFeeRequired))
+      throw JSONRPCError(RPC_WALLET_ERROR, "Transaction creation failed. Sufficient funds?");
+    result.push_back(Pair("nFee", nFeeRequired));
+
+    // commit
+    if (!pwalletMain->CommitTransaction(wtx, keyChange))
+      throw JSONRPCError(RPC_WALLET_ERROR, "Transaction commit failed");
+    result.push_back(Pair("txid", wtx.GetHash().GetHex()));
+
+    return result;
+}
+
+Value registeralias(const Array& params, bool fHelp)
+{ 
     if (fHelp || params.size() < 1 || params.size() > 2)
     {
         string msg = "registeralias <alias> [<certificate hash>]\n"
@@ -827,8 +906,8 @@ Value registeralias(const Array& params, bool fHelp)
       throw runtime_error("RPC registeralias: disabled on mainnet");
     
     // build alias
-    CAlias alias;
-    if (!alias.SetName(params[0].get_str()))
+    CAlias alias(params[0].get_str());
+    if (!alias.IsSet())
       throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC getregistrations: alias may contain only characters a-z,A-Z,0-1,_,-, must start with letter and not end in _,-");
 
     // get new key from keypool 
@@ -876,7 +955,7 @@ Value registeralias(const Array& params, bool fHelp)
     regResult.push_back(Pair("certhash", certhash.ToString()));
 
     // sending
-    string strError = pwalletMain->SendMoney(reg.GetScript(), (int64) BTCPKI_REGAMOUNT, wtx);
+    string strError = pwalletMain->SendMoney(reg.GetScript(), (int64) 50000, wtx);
     if (strError != "")
         throw JSONRPCError(RPC_WALLET_ERROR, strError);
 
@@ -920,13 +999,17 @@ Value sendtoaliasowner(const Array& params, bool fHelp)
 	    "<ticket> is a hex number, if given then funds are sent to ticket*ownerpubkey" 
             + HelpRequiringPassphrase());
 
+    return 0;
+}
+
+/* deprecated
     // testnet only?
     if (BTCPKI_TESTNETONLY && !fTestNet)
       throw runtime_error("RPC registeralias: disabled on mainnet");
     
     // build alias
-    CAlias alias;
-    if (!alias.SetName(params[0].get_str()))
+    CAlias alias(params[0].get_str());
+    if (!alias.IsSet())
       throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC sendtoaliasowner: alias may contain only characters a-z,A-Z,0-1,_,-, must start with letter and not end in _,-");
 
     // Amount
@@ -964,6 +1047,7 @@ Value sendtoaliasowner(const Array& params, bool fHelp)
 
     return wtx.GetHash().GetHex();
 }
+*/
 
 struct tallyitem
 {

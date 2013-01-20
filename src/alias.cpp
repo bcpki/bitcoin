@@ -1,30 +1,91 @@
 #include <iostream>
 #include <locale>
 #include "alias.h"
-#include "hash.h" 
+#include "hash.h" // Hash
 #include "base58.h" // CBitcoinAddress
-#include "txdb.h" // GetFirstMultsigWithPubkey
+#include "txdb.h" // GetFirstMatch
 #include "bitcoinrpc.h" // ValueFromAmount
+#include "btcert/btcert.pb.h" 
 
 #include <boost/foreach.hpp>
-
 using namespace std;
+using namespace json_spirit;
 
-/* CValue */
+/* CBcValue */
 
-void CValue::init(const uint256& val) {
+void CBcValue::init(const uint256& val) {
   value = val;
   key.SetSecretByNumber(val);
+  fSet = true;
 }
 
-CValue::CValue(const string& str) {
+CBcValue::CBcValue(const string& str) {
     if (!IsHex(str))
-      throw runtime_error("CValue::CValue:: hash not in hex format");
+      throw runtime_error("CBcValue::CBcValue:: hash not in hex format");
 
     if (str.size() > 64)
-      throw runtime_error("CValue::CValue:: hex str is more than 64 characters (32 bytes)");
+      throw runtime_error("CBcValue::CBcValue:: hex str is more than 64 characters (32 bytes)");
 
     init(uint256(str));
+}
+
+bool CBcValue::AppearsInScript(const CScript script, bool fFirst) const {
+  txnouttype typeRet = TX_NONSTANDARD;
+  vector<vector<unsigned char> > vSolutions;
+  if (!Solver(script, typeRet, vSolutions))
+    return false;
+
+  if (typeRet != TX_MULTISIG)
+    return false;
+
+  if (fFirst)
+    return (CPubKey(vSolutions[1]) == key.GetPubKey());
+  else
+    BOOST_FOREACH(const vector<unsigned char> sol, vSolutions)
+    {
+      if (CPubKey(sol) == key.GetPubKey())
+	return true;
+    }
+  return false;
+}
+
+vector<unsigned int> CBcValue::FindInCoins(const CCoins coins, const int64 minamount,  bool fFirst) const {
+  vector<unsigned int> outs;
+  unsigned int i;
+  BOOST_FOREACH(const CTxOut &out, coins.vout) {
+    if (AppearsInScript(out.scriptPubKey, fFirst) && (out.nValue >= minamount))
+      {
+	outs.push_back(i);
+	i++;
+      }
+  }
+  return outs;
+}
+
+bool CBcValue::IsValidInCoins(const CCoins coins) const {
+  std::vector<unsigned int> outs = FindInCoins(coins, (int64) 100*50000, true);
+  return (outs.size() > 0);
+}
+
+CScript CBcValue::MakeScript(const vector<CPubKey> owners) const {
+  CScript script;
+  vector<CKey> keys (1,key);
+  BOOST_FOREACH(const CPubKey owner, owners) {
+    CKey newkey;
+    newkey.SetPubKey(owner);
+    keys.push_back(newkey);
+  }
+  script.SetMultisig(keys.size(), keys);
+
+  return script;
+};
+
+Object CBcValue::ToJSON() const {
+  Object result;
+  result.push_back(Pair("value", value.ToString()));
+  result.push_back(Pair("pubkey", GetPubKeyHex()));
+  result.push_back(Pair("addr", CBitcoinAddress(GetPubKeyID()).ToString()));
+  return result;
 }
 
 /* CAlias */
@@ -73,21 +134,13 @@ string CAlias::normalize(const string& str) {
   return BTCPKI_PREFIX + result;
 }
 
-//CSecret CAlias::GetSecret() const {
-//  CSecret secret;
-//}
-
-bool CAlias::SetName(const string& str) {
+CAlias::CAlias(const string& str) {
   if (check(str))
     {
     name = str;
     normalized = normalize(name);
-    hash = Hash(normalized.begin(),normalized.end());
-    key.SetSecretByNumber(hash);
-    return true;
+    init(Hash(normalized.begin(),normalized.end()));
     }
-  else
-    return false;
 }
 
 string CAlias::addressbookname(pubkey_type type) const {
@@ -102,8 +155,9 @@ string CAlias::addressbookname(pubkey_type type) const {
     default:
       return "";
     }
-}
+} 
 
+/* deprecated
 bool CAlias::AppearsInScript(const CScript script) const {
   txnouttype typeRet = TX_NONSTANDARD;
   vector<vector<unsigned char> > vSolutions;
@@ -112,19 +166,18 @@ bool CAlias::AppearsInScript(const CScript script) const {
 
   return ((typeRet == TX_MULTISIG) && (CPubKey(vSolutions[1]) == key.GetPubKey()));
 }
+*/
 
-bool CAlias::AppearsInCoins(const CCoins coins) const {
-  BOOST_FOREACH(const CTxOut &out, coins.vout) {
-    if (AppearsInScript(out.scriptPubKey) && (out.nValue >= BTCPKI_REGAMOUNT))
-      return true;
-  }
-  return false;
+bool CAlias::IsValidInCoins(const CCoins coins) const {
+  std::vector<unsigned int> outs = FindInCoins(coins, (int64) 100*50000, true);
+  return (outs.size() > 0);
 }
 
-int CAlias::Lookup(vector<CPubKey>& sigs) const {
+/* deprecated
+int CAlias::LookupSignatures(vector<CPubKey>& sigs) const {
   boost::function<bool (const CCoins)> func;
   boost::function<bool (const CAlias* first, const CCoins)> mem;
-  mem = std::mem_fun(&CAlias::AppearsInCoins);
+  mem = std::mem_fun(&CAlias::IsValidInCoins);
   func = std::bind1st(mem, this);
   uint256 txid;
   if (!pcoinsTip->GetFirstMatch(func, txid))
@@ -137,28 +190,33 @@ int CAlias::Lookup(vector<CPubKey>& sigs) const {
   }
   return coins.nHeight;
 }
+*/
 
-bool CAlias::Verify(const CValue& sig, int& nHeight) const {
-  vector<CPubKey> sigs;
-  nHeight = Lookup(sigs);
+bool CAlias::Lookup(uint256& txidRet) const {
+  boost::function<bool (const CCoins)> func;
+  boost::function<bool (const CAlias* first, const CCoins)> mem;
+  mem = std::mem_fun(&CAlias::IsValidInCoins);
+  func = std::bind1st(mem, this);
+  return pcoinsTip->GetFirstMatch(func, txidRet);
+}
 
-  if (nHeight >= 0) {
-    BOOST_FOREACH(const CPubKey &s, sigs) {
-      if (s == sig.GetPubKey())
-	return true;
-    }
-  }
+bool CAlias::VerifySignature(const CBcValue val, uint256& txidRet) const {
+  if (!Lookup(txidRet))
+    return false;
 
-  return false;
+  CCoins coins;
+  if (!pcoinsTip->GetCoins(txidRet, coins))
+    throw runtime_error("CAlias::VerifySignature: GetCoins failed.");
+
+  return val.IsValidInCoins(coins);
 }
   
 Object CAlias::ToJSON() const {
   Object result;
+  result.push_back(Pair("fSet", fSet));
   result.push_back(Pair("str", name));
   result.push_back(Pair("normalized", normalized));
-  result.push_back(Pair("hash", hash.ToString()));
-  result.push_back(Pair("pubkey", GetPubKeyHex()));
-  result.push_back(Pair("addr", CBitcoinAddress(GetPubKeyID()).ToString()));
+  result.push_back(Pair("bcvalue", CBcValue::ToJSON()));
   return result;
 }
 
@@ -181,11 +239,12 @@ CScript CRegistrationEntry::GetScript() const {
   keys.push_back(ownerKey);
   if (fCert)
       keys.push_back(certKey);
-  script.SetMultisig(keys.size()-1, keys);
+  script.SetMultisig(keys.size(), keys);
 
   return script;
 };
   
+/* deprecated
 bool CRegistrationEntry::SetByScript(const CScript& scriptPubKey) {
   vector<CPubKey> pubkeys;
   if (!ExtractPubKeysFromMultisig(scriptPubKey,pubkeys))
@@ -205,6 +264,7 @@ bool CRegistrationEntry::SetByScript(const CScript& scriptPubKey) {
     fCert = false;
   return true;
 }
+*/
 
 int64 CRegistrationEntry::GetNValue() const {
   CCoins coins;
@@ -233,6 +293,7 @@ Object CRegistrationEntry::ToJSON() const {
 
 /* CRegistration */
 
+/* deprecated
 bool CRegistration::Lookup(const CAlias& alias) {
 
   CCoins coins;
@@ -251,6 +312,7 @@ bool CRegistration::Lookup(const CAlias& alias) {
   };
   return true;
 };
+*/
 
 Object CRegistration::ToJSON() const {
   Object result;
@@ -273,6 +335,15 @@ Object CRegistration::ToJSON() const {
   
   return result;
 }
+
+/* CPubKey */
+
+Object PubKeyToJSON(const CPubKey& key) {
+  Object result;
+  result.push_back(Pair("pubkey", HexStr(key.Raw())));
+  result.push_back(Pair("addr", CBitcoinAddress(key.GetID()).ToString()));
+  return result;
+};
 
 /* CKey */
 
@@ -301,7 +372,7 @@ Object ScriptToJSON(const CScript& script) {
 
 /* CCoins */
 
-Object CoinsToJSON(const CCoins& coins) {
+Object CoinsToJSON(const CCoins& coins, bool fOuts) {
   Object result;
   if ((unsigned int)coins.nHeight == MEMPOOL_HEIGHT)
     result.push_back(Pair("confirmations", 0));
@@ -311,6 +382,11 @@ Object CoinsToJSON(const CCoins& coins) {
   CBlockIndex *pindex = FindBlockByHeight(coins.nHeight);
   result.push_back(Pair("nTime", strprintf("%u",pindex->nTime)));
   result.push_back(Pair("strTime", DateTimeStrFormat("%Y-%m-%dT%H:%M:%S", pindex->nTime).c_str()));
+  Array outs;
+  BOOST_FOREACH(const CTxOut &out, coins.vout) {
+    outs.push_back(ScriptToJSON(out.scriptPubKey));
+  }
+  result.push_back(Pair("outs", outs));
   return result;
 };
 
@@ -323,4 +399,16 @@ Object OutPointToJSON(const COutPoint& outpt) {
   return result;
 };
 
+/* uint256 txid */
+
+Object TxidToJSON(const uint256& txid) {
+  CCoins coins;
+  if (!pcoinsTip->GetCoins(txid, coins))
+    throw runtime_error("TxidToJSON: GetCoins failed.");
+  Object result = CoinsToJSON(coins,true);
+  result.push_back(Pair("txid", txid.ToString()));
+  return result;
+};
+
+  
 

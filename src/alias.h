@@ -8,73 +8,64 @@
 #include <boost/assign/list_of.hpp>
 
 //TODO remove using namespace from .h
-using namespace json_spirit;
+//using namespace json_spirit;
 
 #define BTCPKI_ALIAS "alias"
 #define BTCPKI_VERSION "0.2"
 #define BTCPKI_PREFIX "v0.2_"
 #define BTCPKI_TESTNETONLY true
-#define BTCPKI_REGAMOUNT 100*50000  
-
-using namespace std;
 
 enum pubkey_type { ADDR, OWNER, CERT };
 
 class CRegistration;
 
-class CValue
+class CBcValue
 {
+protected:
   uint256 value;
   CKey key;
+  bool fSet;
 
   void init(const uint256& val);
-
- public:
-  CValue(const uint256& val) { init(val); };
-  CValue(const string& str);
-
-  uint256 GetValue() const { return value; };
-  string GetHex() const { return value.ToString(); };
-  
-  CKey GetKey() const { return key; };
-  CPubKey GetPubKey() const { return key.GetPubKey(); };
-  string GetPubKeyHex() const { return HexStr(key.GetPubKey().Raw()); };
-  CKeyID GetPubKeyID() const { return key.GetPubKey().GetID(); };
-};
-
-class CAlias 
-{
-    bool check(const string& name);
-    string normalize(const string& str);
-
-    string name;
-    string normalized;
-    uint256 hash;
-    CKey key;
-    // CBigNum num;
+  explicit CBcValue() { };
 
 public:
-    // CAlias();
-    bool SetName(const string& name);
+  explicit CBcValue(const uint256& val) { init(val); };
+  explicit CBcValue(const std::string& str); // requires hex string up to 64 characters (32 bytes)
 
-    bool isSet() const { return (name.size() > 0); };
-    uint256 GetHash() const { return hash; };
-    string GetHashHex() const { return hash.ToString(); };
-    string GetName() const { return name; };
-    string GetNormalized() const { return normalized; };
-    //    CPubKey GetPubKey() const { return key.GetPubKey(); };
-    CKey GetKey() const { return key; };
-    CPubKey GetPubKey() const { return key.GetPubKey(); };
-    string GetPubKeyHex() const { return HexStr(key.GetPubKey().Raw()); };
-    CKeyID GetPubKeyID() const { return key.GetPubKey().GetID(); };
-    //    CBigNum GetBignum() const { return num; };
-    // CSecret GetSecret() const;
-    string addressbookname(const pubkey_type type) const;
-    bool AppearsInCoins(const CCoins coins) const;
-    bool AppearsInScript(const CScript script) const;
-    int Lookup(vector<CPubKey>& reg) const;
-    bool Verify(const CValue& sig, int& nHeight) const;
-    Object ToJSON() const;
+  bool IsSet() const { return fSet; };
+  uint256 GetValue() const { return value; };
+  CKey GetKey() const { return key; };
+  CPubKey GetPubKey() const { return key.GetPubKey(); };
+  CKeyID GetPubKeyID() const { return key.GetPubKey().GetID(); };
+  std::string GetHex() const { return value.ToString(); };
+  std::string GetPubKeyHex() const { return HexStr(key.GetPubKey().Raw()); };
+  bool AppearsInScript(const CScript script, bool fFirst = true) const;
+  std::vector<unsigned int> FindInCoins(const CCoins coins, const int64 minamount,  bool fFirst = true) const;
+  bool IsValidInCoins(const CCoins coins) const;
+  json_spirit::Object ToJSON() const;
+  CScript MakeScript(const std::vector<CPubKey> owners) const;
+};
+
+class CAlias: public CBcValue 
+{
+  std::string name;
+  std::string normalized;
+
+  bool check(const std::string& name);
+  std::string normalize(const std::string& str);
+
+ public:
+  explicit CAlias(const std::string& name); // requires a valid alias string (limited charset)
+  std::string GetName() const { return name; };
+  std::string GetNormalized() const { return normalized; };
+  std::string addressbookname(const pubkey_type type) const; // TODO double-check this function
+  bool IsValidInCoins(const CCoins coins) const;
+  // TODO double-check:
+  // deprecated int LookupSignatures(std::vector<CPubKey>& sigs) const;
+  bool Lookup(uint256& txidRet) const;
+  bool VerifySignature(const CBcValue val, uint256& txidRet) const;
+  json_spirit::Object ToJSON() const;
 };
 
 class CRegistrationEntry
@@ -92,7 +83,7 @@ class CRegistrationEntry
   CRegistrationEntry(const CAlias& alias, const CPubKey& owner, const uint256& certhash);
 
   // Non-Backed const
-  bool SetByScript(const CScript& scriptPubKey);
+  // deprecated bool SetByScript(const CScript& scriptPubKey); 
   CScript GetScript() const;
   CKeyID GetOwnerPubKeyID() const { return ownerKey.GetPubKey().GetID(); }; 
   CBitcoinAddress GetOwnerAddr() const { return CBitcoinAddress(ownerKey.GetPubKey().GetID()); }; 
@@ -103,45 +94,47 @@ class CRegistrationEntry
   
   //bool GetfCert() const { return fCert; }
   //CPubKey GetOwnerPubKey() const { return ownerKey.GetPubKey(); }; 
-  //string GetOwnerPubKeyHex() const { return HexStr(ownerKey.GetPubKey().Raw()); }; 
+  //std::string GetOwnerPubKeyHex() const { return HexStr(ownerKey.GetPubKey().Raw()); }; 
   //CPubKey GetCertPubKey() const { return certKey.GetPubKey(); }; 
-  //string GetCertPubKeyHex() const { return HexStr(certKey.GetPubKey().Raw()); }; 
+  //std::string GetCertPubKeyHex() const { return HexStr(certKey.GetPubKey().Raw()); }; 
 
   // Backed const
   int64 GetNValue() const;
 
   // All
-  Object ToJSON() const;
+  json_spirit::Object ToJSON() const;
 
   // Old
-  //  string GetScriptHex() const { return HexStr(script.begin(), script.end()); }; 
+  //  std::string GetScriptHex() const { return HexStr(script.begin(), script.end()); }; 
 
   friend class CRegistration;
 };
 
 class CRegistration 
 {
-  vector<CRegistrationEntry> vreg;
+  std::vector<CRegistrationEntry> vreg;
 
   bool fBacked;
   uint256 txid;
-  vector<unsigned int> outs;
+  std::vector<unsigned int> outs;
   
 public:
   CRegistration() { fBacked = false; };
 
-  bool Lookup(const CAlias& alias);
+  // deprecated bool Lookup(const CAlias& alias);
 
   // const
   unsigned int GetNEntries() const { return vreg.size(); };
   CRegistrationEntry GetEntry(unsigned int n) const { return vreg[n]; };
-  Object ToJSON() const;
+  json_spirit::Object ToJSON() const;
 
   friend class CAlias;
 };
 
-Object KeyToJSON(const CKey& key);
-Object ScriptToJSON(const CScript& script);
-Object CoinsToJSON(const CCoins& coins);
-Object OutPointToJSON(const COutPoint& outpt);
+json_spirit::Object KeyToJSON(const CKey& key);
+json_spirit::Object PubKeyToJSON(const CPubKey& key);
+json_spirit::Object ScriptToJSON(const CScript& script);
+json_spirit::Object CoinsToJSON(const CCoins& coins, const bool fOuts = false);
+json_spirit::Object OutPointToJSON(const COutPoint& outpt);
+json_spirit::Object TxidToJSON(const uint256& txid);
 

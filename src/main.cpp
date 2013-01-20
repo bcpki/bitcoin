@@ -175,7 +175,7 @@ CBlockIndex *CCoinsView::GetBestBlock() { return NULL; }
 bool CCoinsView::SetBestBlock(CBlockIndex *pindex) { return false; }
 bool CCoinsView::BatchWrite(const std::map<uint256, CCoins> &mapCoins, CBlockIndex *pindex) { return false; }
 bool CCoinsView::GetStats(CCoinsStats &stats) { return false; }
-bool CCoinsView::GetFirstMultisigWithPubKey(const CPubKey& searchKey, uint256& txRet, CCoins& coinsRet, vector<unsigned int>& outRet) { return false; };
+// deprecated bool CCoinsView::GetFirstMultisigWithPubKey(const CPubKey& searchKey, uint256& txRet, CCoins& coinsRet, vector<unsigned int>& outRet) { return false; };
 bool CCoinsView::GetFirstMatch(boost::function<bool (const CCoins)> f, uint256& txRet) { return false; };
 
 CCoinsViewBacked::CCoinsViewBacked(CCoinsView &viewIn) : base(&viewIn) { }
@@ -187,7 +187,7 @@ bool CCoinsViewBacked::SetBestBlock(CBlockIndex *pindex) { return base->SetBestB
 void CCoinsViewBacked::SetBackend(CCoinsView &viewIn) { base = &viewIn; }
 bool CCoinsViewBacked::BatchWrite(const std::map<uint256, CCoins> &mapCoins, CBlockIndex *pindex) { return base->BatchWrite(mapCoins, pindex); }
 bool CCoinsViewBacked::GetStats(CCoinsStats &stats) { return base->GetStats(stats); }
-bool CCoinsViewBacked::GetFirstMultisigWithPubKey(const CPubKey& searchKey, uint256& txRet, CCoins& coinsRet, vector<unsigned int>& outRet) { return base->GetFirstMultisigWithPubKey(searchKey,txRet,coinsRet,outRet); };
+// deprecated bool CCoinsViewBacked::GetFirstMultisigWithPubKey(const CPubKey& searchKey, uint256& txRet, CCoins& coinsRet, vector<unsigned int>& outRet) { return base->GetFirstMultisigWithPubKey(searchKey,txRet,coinsRet,outRet); };
 bool CCoinsViewBacked::GetFirstMatch(boost::function<bool (const CCoins)> f, uint256& txRet) { return base->GetFirstMatch(f, txRet); };
 
 CCoinsViewCache::CCoinsViewCache(CCoinsView &baseIn, bool fDummy) : CCoinsViewBacked(baseIn), pindexTip(NULL) { }

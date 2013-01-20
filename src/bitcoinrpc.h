@@ -197,6 +197,7 @@ extern json_spirit::Value registeralias(const json_spirit::Array& params, bool f
 extern json_spirit::Value sendtoaliasowner(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value getregistrations(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value btcpkiverify(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value btcpkisign(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value importticket(const json_spirit::Array& params, bool fHelp);
 
 #endif

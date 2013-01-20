@@ -186,6 +186,7 @@ bool CCoinsViewDB::GetStats(CCoinsStats &stats) {
     return true;
 }
 
+/* deprecated
 bool CCoinsViewDB::GetFirstMultisigWithPubKey(const CPubKey& searchKey, uint256& txRet, CCoins& coinsRet, vector<unsigned int>& outRet) {
     leveldb::Iterator *pcursor = db.NewIterator();
     pcursor->SeekToFirst();
@@ -235,6 +236,7 @@ bool CCoinsViewDB::GetFirstMultisigWithPubKey(const CPubKey& searchKey, uint256&
     delete pcursor;
     return (height > 0);
 }
+*/
 
 bool CBlockTreeDB::LoadBlockIndexGuts()
 {

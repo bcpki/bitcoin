@@ -191,23 +191,21 @@ Value btcpkiverify(const Array& params, bool fHelp)
 	    "[...]\n");
 
     // build alias
-    CAlias alias;
-    if (!alias.SetName(params[0].get_str()))
+    CAlias alias(params[0].get_str());
+    if (!alias.IsSet())
       throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC getregistrations: alias may contain only characters a-z,A-Z,0-1,_,-, must start with letter and not end in _,-");
 
-    int nHeight;
-    bool fRegistered = alias.Verify(CValue(params[1].get_str()),nHeight);
+    CBcValue val(params[1].get_str());
+    uint256 txid;
+    bool fSigned = alias.VerifySignature(val,txid);
 
     // compile output
     Object result;
     result.push_back(Pair("alias", alias.ToJSON()));
-    result.push_back(Pair("nHeight", nHeight));
-    result.push_back(Pair("fRegistered", fRegistered));
-    if (nHeight > 0)
-      {
-        result.push_back(Pair("confirmations", pcoinsTip->GetBestBlock()->nHeight - nHeight + 1));
-      }
-      
+    result.push_back(Pair("val", val.ToJSON()));
+    result.push_back(Pair("fSigned", fSigned));
+    if (fSigned)
+      result.push_back(Pair("tx", TxidToJSON(txid)));
     return result;
 }
 
@@ -222,20 +220,20 @@ Value getregistrations(const Array& params, bool fHelp)
             "{txid, vout, scriptPubKey, amount, .., owner, certhash, ... }");
 
     // build alias
-    CAlias alias;
-    if (!alias.SetName(params[0].get_str()))
+    CAlias alias(params[0].get_str());
+    if (!alias.IsSet())
       throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC getregistrations: alias may contain only characters a-z,A-Z,0-1,_,-, must start with letter and not end in _,-");
 
-    // lookup alias
-    CRegistration reg;
-    bool fRegistered = reg.Lookup(alias);
       
-    // compile output 1
+    uint256 txid;
+    bool fRegistered = alias.Lookup(txid);
+
+    // compile output
     Object result;
     result.push_back(Pair("alias", alias.ToJSON()));
     result.push_back(Pair("fRegistered", fRegistered));
-    result.push_back(Pair("registration", reg.ToJSON()));
-
+    if (fRegistered)
+      result.push_back(Pair("tx", TxidToJSON(txid)));
     return result;
 }
 
