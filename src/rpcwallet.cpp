@@ -878,7 +878,7 @@ Value btcpkisign(const Array& params, bool fHelp)
     int64 nFeeRequired;
     if (!pwalletMain->CreateTransaction(vecSend,wtx,keyChange,nFeeRequired))
       throw JSONRPCError(RPC_WALLET_ERROR, "Transaction creation failed. Sufficient funds?");
-    result.push_back(Pair("nFee", nFeeRequired));
+    result.push_back(Pair("nFee", ValueFromAmount(nFeeRequired)));
 
     // commit
     if (!pwalletMain->CommitTransaction(wtx, keyChange))
