@@ -5,7 +5,6 @@
 #include "base58.h" // CBitcoinAddress
 #include "txdb.h" // GetFirstMatch
 #include "bitcoinrpc.h" // ValueFromAmount
-//#include "btcert/btcert.pb.h" 
 
 #include <boost/foreach.hpp>
 using namespace std;

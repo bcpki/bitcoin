@@ -8,6 +8,7 @@
 //BTCPKI
 #include "alias.h" 
 //#include "base58.h" // CBitcoinAddress
+#include "btcpki.h"  
 
 using namespace json_spirit;
 using namespace std;
@@ -194,6 +195,8 @@ Value btcpkiverify(const Array& params, bool fHelp)
     CAlias alias(params[0].get_str());
     if (!alias.IsSet())
       throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC getregistrations: alias may contain only characters a-z,A-Z,0-1,_,-, must start with letter and not end in _,-");
+
+    ReadCertFile(params[0].get_str());
 
     CBcValue val(params[1].get_str());
     uint256 txid;
