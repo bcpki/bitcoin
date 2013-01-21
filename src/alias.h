@@ -1,14 +1,15 @@
+#ifndef BTCPKI_ALIAS_H
+#define BTCPKI_ALIAS_H
+
 #include <string>
 #include "uint256.h"
 #include "key.h" // CSecret
 #include "base58.h" // CBitcoinAddress
 #include "main.h" 
 #include "script.h" // IsAliasRegistration
+#include "json/json_spirit_utils.h"
 
 #include <boost/assign/list_of.hpp>
-
-//TODO remove using namespace from .h
-//using namespace json_spirit;
 
 #define BTCPKI_ALIAS "alias"
 #define BTCPKI_VERSION "0.2"
@@ -27,9 +28,9 @@ protected:
   bool fSet;
 
   void init(const uint256& val);
-  explicit CBcValue() { };
 
 public:
+  explicit CBcValue() { };
   explicit CBcValue(const uint256& val) { init(val); };
   explicit CBcValue(const std::string& str); // requires hex string up to 64 characters (32 bytes)
 
@@ -138,3 +139,5 @@ json_spirit::Object CoinsToJSON(const CCoins& coins, const bool fOuts = false);
 json_spirit::Object OutPointToJSON(const COutPoint& outpt);
 json_spirit::Object TxidToJSON(const uint256& txid);
 
+
+#endif // BTCPKI_ALIAS_H

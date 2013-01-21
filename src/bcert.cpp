@@ -1,7 +1,11 @@
 #include "util.h"
+#include "uint256.h"
+#include "hash.h"
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
-#include "bcert/bcert.pb.h"
+#include "bcert.h"
+
+using namespace json_spirit;
 
 /* from util.cpp
 #include "sync.h"
@@ -57,13 +61,83 @@ namespace boost {
 
 using namespace std;
 
-bool ReadCertFile(const string filename)
+/* deprecated
+Object ReadCertFile(const string filename)
 {
-    boost::filesystem::path pathCerts = GetDataDir() / "certs";
-    boost::filesystem::path pathCert = pathCerts / filename;
+    boost::filesystem::path pathCerts = GetDataDir() / "bcerts";
+    boost::filesystem::path pathCert = pathCerts / (filename + ".crt");
 
     boost::filesystem::ifstream file(pathCert);
-    if (!file.good())
-        return true; // No bitcoin.conf file is OK
-    return false;
+
+    Object result;
+    result.push_back(Pair("path",pathCert.string()));
+    result.push_back(Pair("good",file.good()));
+
+    bcert::BitcoinCert cert;
+    bool fParsed = cert.ParseFromIstream(&file);
+    result.push_back(Pair("fParsed",fParsed));
+    if(!fParsed)
+      return result;
+    for (int i = 0; i < cert.signatures_size(); i++) {
+      bcert::BitcoinCertSignature sig = cert.signatures(i);
+      result.push_back(Pair("sigtype",sig.algorithm().type()));
+      result.push_back(Pair("sigversion",sig.algorithm().version()));
+      result.push_back(Pair("sigvalue",sig.value()));
+    }
+
+    return result;
 }
+*/
+
+bool BitcoinCert::init(const string name) {
+  boost::filesystem::path path = GetDataDir() / "bcerts" / (name + ".crt");
+  boost::filesystem::ifstream file(path);
+  if (file.good() && cert.ParseFromIstream(&file))
+    fSet = true;
+  else
+    fSet = false;
+  return fSet;
+  //result.push_back(Pair("path",pathCert.string()));
+  //result.push_back(Pair("good",file.good()));
+}
+
+BitcoinCert::BitcoinCert(CAlias alias) {
+  if (!init(alias.GetPubKeyHex()))
+    if (!init(alias.GetHex()))
+      if (!init(alias.GetNormalized()))
+	init(alias.GetName());
+};
+
+bool BitcoinCert::GetName(string &name) const {
+  if (!fSet || !cert.signatures_size())
+    return false;
+  for (int i = 0; i < cert.signatures_size(); i++) {
+    bcert::BitcoinCertSignature sig = cert.signatures(i);
+    if (sig.algorithm().type() != 1) // type BTCPKI?
+      continue;
+    name = sig.value();
+    return true;
+  }
+  return false;
+};
+  
+uint256 BitcoinCert::GetHash() const {
+  uint256 hash;
+  bcert::BitcoinCertData data = cert.data();
+  string ser;
+  data.SerializeToString(&ser);
+  return Hash(ser.begin(),ser.end());
+};
+
+Object BitcoinCert::ToJSON() const {
+  Object result;
+  result.push_back(Pair("fSet",fSet));
+  for (int i = 0; i < cert.signatures_size(); i++) {
+    bcert::BitcoinCertSignature sig = cert.signatures(i);
+    result.push_back(Pair("sigtype",sig.algorithm().type()));
+    result.push_back(Pair("sigversion",sig.algorithm().version()));
+    result.push_back(Pair("sigvalue",sig.value()));
+  }
+  return result;
+}
+ 

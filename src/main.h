@@ -10,7 +10,7 @@
 #include "net.h"
 #include "script.h"
 // BTCPKI
-#include "json/json_spirit_utils.h"
+//#include "json/json_spirit_utils.h"
 
 #include <list>
 

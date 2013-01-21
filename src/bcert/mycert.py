@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-from btcert_pb2 import * 
+from bcert_pb2 import * 
 import binascii
 
 # fill out a minimal bitcoin cert
@@ -36,7 +36,7 @@ print DataToHash(cert.data).encode('hex')
 sig = cert.signatures.add()
 sig.algorithm.type = sig.algorithm.BTCPKI
 sig.algorithm.version = "0.2"
-sig.value = "foo"  # for signatures of type BTCPKI the alias IS the value, 
+sig.value = "foo3"  # for signatures of type BTCPKI the alias IS the value, 
                    # other types place the signature of BitcoinCertDataToHash(certData) here, 
                    # for BTCPKI this hash appears in the blockchain instead
 
@@ -60,9 +60,16 @@ def CertToAscii(cert):
   res += '-----END BTCPKI CERTIFICATE-----\n'
   return res
 
+print "serialized and ascii armored"
 print CertToAscii(cert)
 
 # TODO: AsciiToCert
+
+fname = sig.value+'.crt'
+f=open(fname,'wb')
+f.write(cert.SerializeToString())
+f.close()
+print "serialized binary form written to "+fname
 
 # OLD
 #from subprocess import Popen,PIPE,check_call,call
@@ -70,6 +77,3 @@ print CertToAscii(cert)
 #result = p.stdout.read()
 #print result
 
-#f=open('my.cert','wb')
-#f.write(Cert.SerializeToString())
-#f.close()

@@ -184,26 +184,43 @@ Value gettxoutsetinfo(const Array& params, bool fHelp)
 
 Value btcpkiverify(const Array& params, bool fHelp)
 {
-    if (fHelp || params.size() > 2 || params.size() < 2)
+    if (fHelp || params.size() > 2 || params.size() < 1)
         throw runtime_error(
-            "btcpkiverify <alias> <hash>\n"
+            "btcpkiverify <alias> [<hash>]\n"
             "verify a blockchain signature under name <alias>.\n"
-	    "<hash> is in hex format 160 or 256 bit.\n"
-	    "[...]\n");
+	    "<hash> is in hex format up to 256 bit (64 characters).\n"
+	    "if no hash is given, we look for a cert for <alias> in .bitcoin/bcerts and verify that.\n");
 
     // build alias
     CAlias alias(params[0].get_str());
     if (!alias.IsSet())
       throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC getregistrations: alias may contain only characters a-z,A-Z,0-1,_,-, must start with letter and not end in _,-");
 
-    ReadCertFile(params[0].get_str());
+    BitcoinCert cert(alias);
+    Object result;
+    result.push_back(Pair("cert", cert.ToJSON()));
+    string certname;
+    bool fCertName = cert.GetName(certname);
+    fCertName = fCertName && (alias.GetName() == certname);
+    result.push_back(Pair("CertName", certname));
+    result.push_back(Pair("fCertName", fCertName));
 
-    CBcValue val(params[1].get_str());
+    CBcValue val;
+    if (params.size() > 1)
+      val = CBcValue(params[1].get_str());
+    else
+      {
+	if (!cert.IsSet())
+	  throw runtime_error("cert not found.\n");
+	val = CBcValue(cert.GetHash());
+      }
+
+    //    CBcValue val(params[1].get_str());
+ 
     uint256 txid;
     bool fSigned = alias.VerifySignature(val,txid);
 
     // compile output
-    Object result;
     result.push_back(Pair("alias", alias.ToJSON()));
     result.push_back(Pair("val", val.ToJSON()));
     result.push_back(Pair("fSigned", fSigned));

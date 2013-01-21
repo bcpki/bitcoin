@@ -1,4 +1,4 @@
-protoc --python_out=. btcert.proto 
-protoc --cpp_out=. btcert.proto 
+protoc --python_out=. bcert.proto 
+protoc --cpp_out=.. bcert.proto 
 ./mycert.py
 

@@ -197,6 +197,11 @@ int main(int argc, char* argv[])
 {
     bool fRet = false;
 
+    // Verify that the version of the library that we linked against is
+    // compatible with the version of the headers we compiled against.
+    // TODO: here?
+    // GOOGLE_PROTOBUF_VERIFY_VERSION;
+
     // Connect bitcoind signal handlers
     noui_connect();
 

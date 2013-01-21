@@ -1,4 +1,4 @@
-package BTCert;
+package bcert;
 
 message BitcoinCertSignature {
   message SignatureAlgorithm {
