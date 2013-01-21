@@ -8,7 +8,7 @@
 //BTCPKI
 #include "alias.h" 
 //#include "base58.h" // CBitcoinAddress
-#include "btcpki.h"  
+#include "bcert.h"  
 
 using namespace json_spirit;
 using namespace std;

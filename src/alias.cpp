@@ -1,5 +1,4 @@
-#include <iostream>
-#include <locale>
+//#include <locale>
 #include "alias.h"
 #include "hash.h" // Hash
 #include "base58.h" // CBitcoinAddress

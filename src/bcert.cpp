@@ -1,6 +1,8 @@
 #include "util.h"
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
+#include "bcert/bcert.pb.h"
+
 /* from util.cpp
 #include "sync.h"
 #include "version.h"
