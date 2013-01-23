@@ -17,7 +17,9 @@ paykey = cert.data.paymentkeys.add()
 paykey.usage = paykey.PAYMENT
 paykey.algorithm.type = paykey.algorithm.BTCPKISINGLE # is default anyway
 paykey.algorithm.version = "0.2"
-paykey.value = "0211b60f23135a806aff2c8f0fbbe620c16ba05a9ca4772735c08a16407f185b34".decode('hex')
+key = paykey.value.append("0211b60f23135a806aff2c8f0fbbe620c16ba05a9ca4772735c08a16407f185b34".decode('hex'))
+key = paykey.value.append("0211b60f23135a806aff2c8f0fbbe620c16ba05a9ca4772735c08a16407f185b34".decode('hex'))
+print dir(paykey.value)
 
 # see how the cert.data looks
 print "data part of cert"
