@@ -82,6 +82,9 @@ Object CBcValue::ToJSON() const {
   Object result;
   result.push_back(Pair("value", value.ToString()));
   result.push_back(Pair("pubkey", GetPubKeyHex()));
+  std::vector<unsigned char> vch = key.GetPubKey().Raw();
+  result.push_back(Pair("pubkeyraw", HexStr(vch)));
+  result.push_back(Pair("pubkeyhash", Hash(vch.begin(), vch.end()).GetHex()));
   result.push_back(Pair("addr", CBitcoinAddress(GetPubKeyID()).ToString()));
   return result;
 }

@@ -126,7 +126,10 @@ uint256 BitcoinCert::GetHash() const {
   bcert::BitcoinCertData data = cert.data();
   string ser;
   data.SerializeToString(&ser);
-  return Hash(ser.begin(),ser.end());
+  fstream output("data.crt");
+  data.SerializeToOstream(&output);
+  std::vector<unsigned char> vch(ser.begin(),ser.end());
+  return Hash(vch.begin(),vch.end());
 };
 
 Object BitcoinCert::ToJSON() const {
