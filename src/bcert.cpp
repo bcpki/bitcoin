@@ -89,26 +89,38 @@ Object ReadCertFile(const string filename)
 }
 */
 
+ // parse file name.bcrt
 bool BitcoinCert::init(const string name) {
-  boost::filesystem::path path = GetDataDir() / "bcerts" / (name + ".crt");
+  boost::filesystem::path path = GetDataDir() / "bcerts" / (name + ".bcrt");
   boost::filesystem::ifstream file(path);
-  if (file.good() && cert.ParseFromIstream(&file))
-    fSet = true;
+  fSigneeMatch = false;
+
+  if ((!file.good()) || (!cert.ParseFromIstream(&file)))
+    return (fSet = false);
   else
-    fSet = false;
-  return fSet;
+    fSet = true;
+
+  string signee;
+  GetSignee(signee);
+  fSigneeMatch = (CAlias(signee).GetPubKeyIDHex() == name); 
+
+  return true;
   //result.push_back(Pair("path",pathCert.string()));
   //result.push_back(Pair("good",file.good()));
 }
 
 BitcoinCert::BitcoinCert(CAlias alias) {
+  init(alias.GetPubKeyIDHex());
+  
+  /*
   if (!init(alias.GetPubKeyHex()))
-    if (!init(alias.GetHex()))
+    if (!init(alias.GetLEHex()))
       if (!init(alias.GetNormalized()))
 	init(alias.GetName());
+  */
 };
 
-bool BitcoinCert::GetName(string &name) const {
+bool BitcoinCert::GetSignee(string &name) const {
   if (!fSet || !cert.signatures_size())
     return false;
   for (int i = 0; i < cert.signatures_size(); i++) {
@@ -121,20 +133,19 @@ bool BitcoinCert::GetName(string &name) const {
   return false;
 };
   
-uint256 BitcoinCert::GetHash() const {
-  uint256 hash;
-  bcert::BitcoinCertData data = cert.data();
+uint160 BitcoinCert::GetHash160() const {
   string ser;
+  bcert::BitcoinCertData data = cert.data();
   data.SerializeToString(&ser);
-  fstream output("data.crt");
-  data.SerializeToOstream(&output);
   std::vector<unsigned char> vch(ser.begin(),ser.end());
-  return Hash(vch.begin(),vch.end());
+  uint160 hash160 = Hash160(vch);
+  return hash160; 
 };
 
 Object BitcoinCert::ToJSON() const {
   Object result;
   result.push_back(Pair("fSet",fSet));
+  result.push_back(Pair("fSigneeMatch",fSigneeMatch));
   for (int i = 0; i < cert.signatures_size(); i++) {
     bcert::BitcoinCertSignature sig = cert.signatures(i);
     result.push_back(Pair("sigtype",sig.algorithm().type()));

@@ -855,7 +855,7 @@ Value btcpkisign(const Array& params, bool fHelp)
     // build output scripts
     vector<pair<CScript,int64> > vecSend;
     Array outs;
-    BOOST_FOREACH(const CBcValue val, values)
+    BOOST_FOREACH(CBcValue val, values)
       {
 	pair<CScript,int64> out (val.MakeScript(owners),100*50000);
 	vecSend.push_back(out);

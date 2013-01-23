@@ -20,32 +20,45 @@ enum pubkey_type { ADDR, OWNER, CERT };
 
 class CRegistration;
 
+// Blockchain value 
 class CBcValue
 {
 protected:
   uint256 value;
+  uint160 hash;
   CKey key;
+  CKeyID keyID;
   bool fSet;
 
-  void init(const uint256& val);
+  void init_uint256(const uint256 val);
+  bool init_vch(std::vector<unsigned char> vch);
+  // should be const, but begin(),end() are not const
+  bool init_uint160(uint160 val);
 
 public:
   explicit CBcValue() { };
-  explicit CBcValue(const uint256& val) { init(val); };
+  explicit CBcValue(const uint256 val) { init_uint256(val); };
+  // should be const, but begin(),end() are not const
+  explicit CBcValue(uint160 val) { init_uint160(val); };
   explicit CBcValue(const std::string& str); // requires hex string up to 64 characters (32 bytes)
 
   bool IsSet() const { return fSet; };
   uint256 GetValue() const { return value; };
   CKey GetKey() const { return key; };
   CPubKey GetPubKey() const { return key.GetPubKey(); };
-  CKeyID GetPubKeyID() const { return key.GetPubKey().GetID(); };
-  std::string GetHex() const { return value.ToString(); };
+  CKeyID GetPubKeyID() const { return keyID; };
   std::string GetPubKeyHex() const { return HexStr(key.GetPubKey().Raw()); };
   bool AppearsInScript(const CScript script, bool fFirst = true) const;
   std::vector<unsigned int> FindInCoins(const CCoins coins, const int64 minamount,  bool fFirst = true) const;
   bool IsValidInCoins(const CCoins coins) const;
-  json_spirit::Object ToJSON() const;
   CScript MakeScript(const std::vector<CPubKey> owners) const;
+  // should be const, but begin(),end() are not const
+  //  std::string GetPubKeyIDHex() { const std::vector<unsigned char> vch(keyID.begin(),keyID.end()); return HexStr(vch); };
+  std::string GetPubKeyIDHex() { return HexStr(keyID.begin(),keyID.end()); };
+  //std::string GetLEHex() { const std::vector<unsigned char> vch(value.begin(),value.end()); return HexStr(vch); }; // little-endian hex string
+  std::string GetLEHex() { return HexStr(value.begin(),value.end()); }; // little-endian hex string
+  json_spirit::Object ToJSON();
+  //std::string GetLEHex() const { return HexStr(value.Raw()); }; // little-endian hex string
 };
 
 class CAlias: public CBcValue 
@@ -57,7 +70,9 @@ class CAlias: public CBcValue
   std::string normalize(const std::string& str);
 
  public:
-  explicit CAlias(const std::string& name); // requires a valid alias string (limited charset)
+  // requires a valid alias string (limited charset), applies normalization and Hash160
+  explicit CAlias(const std::string& name); 
+
   std::string GetName() const { return name; };
   std::string GetNormalized() const { return normalized; };
   std::string addressbookname(const pubkey_type type) const; // TODO double-check this function
@@ -66,7 +81,7 @@ class CAlias: public CBcValue
   // deprecated int LookupSignatures(std::vector<CPubKey>& sigs) const;
   bool Lookup(uint256& txidRet) const;
   bool VerifySignature(const CBcValue val, uint256& txidRet) const;
-  json_spirit::Object ToJSON() const;
+  json_spirit::Object ToJSON(); // should be const 
 };
 
 class CRegistrationEntry
