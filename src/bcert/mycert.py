@@ -25,14 +25,12 @@ print dir(paykey.value)
 print "data part of cert"
 print cert.data
 
-# compute hash of data (the signature signs this hash)
-import hashlib 
-def DataToHash(data):
-  return hashlib.sha256(data.SerializeToString()).digest()
+# this is standard in bitcoin ripemd(sha256())
+from bitcoin import hash_160
 
 # see the hash
 print "hash of data part of cert"
-print DataToHash(cert.data).encode('hex')
+print hash_160(cert.data.SerializeToString()).encode('hex')
 
 # add signature to cert
 sig = cert.signatures.add()
@@ -70,6 +68,12 @@ print CertToAscii(cert)
 fname = sig.value+'.crt'
 f=open(fname,'wb')
 f.write(cert.SerializeToString())
+f.close()
+print "serialized binary form written to "+fname
+
+fname = sig.value+'.data'
+f=open(fname,'wb')
+f.write(cert.data.SerializeToString())
 f.close()
 print "serialized binary form written to "+fname
 

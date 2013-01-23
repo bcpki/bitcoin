@@ -7,8 +7,9 @@
 #include "bitcoinrpc.h"
 //BTCPKI
 #include "alias.h" 
-//#include "base58.h" // CBitcoinAddress
 #include "bcert.h"  
+//temporary
+#include <openssl/sha.h>
 
 using namespace json_spirit;
 using namespace std;
@@ -213,6 +214,42 @@ Value btcpkiverify(const Array& params, bool fHelp)
 	if (!cert.IsSet())
 	  throw runtime_error("cert not found.\n");
 	val = CBcValue(cert.GetHash());
+	uint256 hash;
+	bcert::BitcoinCertData data = cert.cert.data();
+	string ser;
+	data.SerializeToString(&ser);
+	result.push_back(Pair("data", ser));
+	result.push_back(Pair("datasize", (int) sizeof ser[0]));
+	//  fstream output("data.crt");
+	// data.SerializeToOstream(&output);
+	std::vector<unsigned char> vch(ser.begin(),ser.end());
+	result.push_back(Pair("datavch", HexStr(vch)));
+	result.push_back(Pair("datavchsize", (int) sizeof vch[0]));
+	uint256 hash0 = Hash(vch.begin(),vch.end());
+	result.push_back(Pair("datahashGetHex", hash0.GetHex()));
+	result.push_back(Pair("datahashHexStr", HexStr(hash0.begin(),hash0.end())));
+	uint160 hash160 = Hash160(vch);
+	result.push_back(Pair("datahash160", HexStr(hash160.begin(),hash160.end())));
+	string helloStr("hello");
+	std::vector<unsigned char> hello(helloStr.begin(),helloStr.end());
+	result.push_back(Pair("hellohex", HexStr(hello)));
+	result.push_back(Pair("hellohash", Hash(hello.begin(),hello.end()).GetHex()));
+	uint256 hash1;
+	SHA256(&hello[0], hello.size(), (unsigned char*)&hash1);
+	result.push_back(Pair("hellosha", hash1.GetHex()));
+	hash1 = 1;
+	result.push_back(Pair("hello1", hash1.GetHex()));
+	hash1 = 16;
+	result.push_back(Pair("hello16", hash1.GetHex()));
+	hash1 = 256;
+	result.push_back(Pair("hello256", hash1.GetHex()));
+	std::vector<unsigned char> hash2(32,0);
+	SHA256(&hello[0], hello.size(), &hash2[0]);
+	result.push_back(Pair("hash2", HexStr(hash2)));
+	uint256 hash3(hash2);
+	result.push_back(Pair("hash3", hash3.GetHex()));
+	uint256 hash4(HexStr(hash2));
+	result.push_back(Pair("hash4", hash4.GetHex()));
       }
 
     //    CBcValue val(params[1].get_str());

@@ -9,12 +9,12 @@
 json_spirit::Object ReadCertFile(const std::string filename);
 
 class BitcoinCert {
-  bcert::BitcoinCert cert;
   bool fSet;
 
   bool init(const std::string filename); //filename without extension
   
  public:
+  bcert::BitcoinCert cert; //temporarily public
   BitcoinCert(CAlias alias); 
   bool IsSet() const { return fSet; };
   bool GetName(std::string &name) const;

@@ -1,8 +1,14 @@
 #!/usr/bin/python
-# from electrum code
 
-from hashlib import sha256
-import ecdsa
+from ecdsa import ellipticcurve
+from ecdsa import numbertheory
+from ecdsa import ecdsa
+from ecdsa import util
+import bitcoin # from electrum code, contains base58 encode and others
+from hashlib import sha256 # will probably need this too
+
+#bitcoin.addrtype = 0x00 # creates mainnet addresses
+bitcoin.addrtype = 0x6f # creates testnet addresses
 
 # secp256k1, http://www.oid-info.com/get/1.3.132.0.10
 _p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2FL
@@ -11,40 +17,46 @@ _b = 0x0000000000000000000000000000000000000000000000000000000000000007L
 _a = 0x0000000000000000000000000000000000000000000000000000000000000000L
 _Gx = 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798L
 _Gy = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8L
-curve_secp256k1 = ecdsa.ellipticcurve.CurveFp( _p, _a, _b )
-generator_secp256k1 = ecdsa.ellipticcurve.Point( curve_secp256k1, _Gx, _Gy, _r )
-oid_secp256k1 = (1,3,132,0,10)
-SECP256k1 = ecdsa.curves.Curve("SECP256k1", curve_secp256k1, generator_secp256k1, oid_secp256k1 )
+C = ellipticcurve.CurveFp( _p, _a, _b ) 
+G = ellipticcurve.Point( C, _Gx, _Gy, _r )
 
-curve = SECP256k1
+# convert compressed pubkey (32+1 bytes) to point
+def pubkey2point(hexstr):
+  x = int(hexstr[2:],16)
+  fx = (x * x * x + C.a() * x + C.b()) % C.p()
+  y = numbertheory.square_root_mod_prime(fx,C.p())
+  P = ellipticcurve.Point(C,x,y)
+  if point2pubkey(P) != hexstr:
+      P = ellipticcurve.Point(C,x,C.p()-y)
+  return P
 
-# demo
-# works:
-#hashstr1='eb623ed1e7849949c8c046e47de3286bb19417aec0702940c9beb29a6b3b2130' # ein alias hash
-#hashstr2='03f1848b40621c5d48471d9784c8174ca060555891ace6d2b03c58eece946b1a91' # der pubkey dazu
-# doesn't work:
-#hashstr1='47bff9a8cece1a8eb6fe7afac6c303714afa2b0e3eac0c88fe6b8ff215cf5c91' # ein alias hash
-#hashstr2='03c8431b9de51956f2d921bc6bb74881fa8653cf534d0597bdfbfedd151ceb477b' # der pubkey dazu
-# doesn't work:
-hashstr1='b791e8615905de527198e0ed00e334dc49a5d579284248637620bc7dd591e389' # das cert 'ilja'
-hashstr2='03fc0caa3f182cd65459b1f2d2b7090d629e16224cfdbbf874a3380a36d3c5f995' # der certhash von der transaction 'ilja'
-hashstr1='e0b98e1a3840822f4957c87c3305a3d305d02915bbceabf9af09a854a87a1bf3' # das cert 'ilja'
-hashstr2='02e7e6b28c2886d23c2c6e3a6f49e3b719692bfac73a564f4c8fe9788d93d77a1e' # der certhash von der transaction 'ilja'
+#ECP = ecdsa.Public_key(G,P)
+#ECQ = ecdsa.Public_key(G,Q)
 
-def calchash(hashstr):
-   P=int(hashstr,16)*curve.generator
-   order = generator_secp256k1.order()
-   x_str = ecdsa.util.number_to_string(P.x(), order)
-   y_str = ecdsa.util.number_to_string(P.y(), order)
-   stri=chr(2 + (P.y() & 1)) + x_str
-   return stri.encode('hex')
+# convert point to compressed pubkey (32+1 bytes)
+def point2pubkey(p):
+    x_str = util.number_to_string(p.x(), G.order())
+    y_str = util.number_to_string(p.y(), G.order())
+    return (chr(2 + (p.y() & 1)) + x_str).encode('hex')
 
-print 'Hash from Cert: \t\t'+hashstr1
-print 'Result: \t\t\t'+calchash(hashstr1)
-print 'Certhash in transaction: \t'+hashstr2
+# convert point to address
+def point2addr(p):
+    return pubkey2addr(point2pubkey(p))
 
-print '\n\n'
+# convert compressed pubkey to address
+def pubkey2addr(hexstr): 
+    return bitcoin.public_key_to_bc_address(hexstr.decode('hex'))
 
-print 'Hash from Cert: \t\t'+hashstr2
-print 'Result: \t\t\t'+calchash(hashstr2)
-print 'Certhash in transaction: \t'+hashstr1
+# derived pubkey  
+def hash2pubkey(hexstr):
+   return point2pubkey(int(hexstr,16)*G)
+
+def hash2addr(hexstr):
+   return point2addr(int(hexstr,16)*G)
+
+# examples
+goo = '0211b60f23135a806aff2c8f0fbbe620c16ba05a9ca4772735c08a16407f185b34' # goo owner pubkey (compressed)
+goo4 = '03046d258651af2fbb6acb63414a604314ce94d644a0efd8832ca5275f2bc207c6' # goo4 owner pubkey (compressed)
+
+certhash = 'fc0c347ea3906d4883d499eaccec1f4318a3d68129034938cb53949260bb1ee6'
+hash2pubkey(certhash)
