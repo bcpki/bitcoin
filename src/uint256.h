@@ -349,6 +349,13 @@ public:
         return sizeof(pn);
     }
 
+    /*
+    std::vector<unsigned char> Raw() {
+      const std::vector<unsigned char> vch(begin(),end());
+      return vch;
+    }
+    */
+    
     uint64 Get64(int n=0) const
     {
         return pn[2*n] | (uint64)pn[2*n+1] << 32;

@@ -192,19 +192,28 @@ Value btcpkiverify(const Array& params, bool fHelp)
 	    "<hash> is in hex format up to 256 bit (64 characters).\n"
 	    "if no hash is given, we look for a cert for <alias> in .bitcoin/bcerts and verify that.\n");
 
+    Object result;
+
     // build alias
     CAlias alias(params[0].get_str());
     if (!alias.IsSet())
       throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC getregistrations: alias may contain only characters a-z,A-Z,0-1,_,-, must start with letter and not end in _,-");
+    result.push_back(Pair("alias", alias.ToJSON()));
+    string norm = alias.GetNormalized();
+    vector<unsigned char> vch(norm.begin(),norm.end());
+    uint160 hash = Hash160(vch);
+    vector<unsigned char> vch2(hash.begin(),hash.end());
+    result.push_back(Pair("vch2", HexStr(vch2.begin(),vch2.end())));
 
+    // look for cert for alias, just to inform the caller
     BitcoinCert cert(alias);
-    Object result;
     result.push_back(Pair("cert", cert.ToJSON()));
-    string certname;
-    bool fCertName = cert.GetName(certname);
-    fCertName = fCertName && (alias.GetName() == certname);
-    result.push_back(Pair("CertName", certname));
-    result.push_back(Pair("fCertName", fCertName));
+    string signee;
+    cert.GetSignee(signee);
+    result.push_back(Pair("signee", signee));
+    CAlias signeealias(signee);
+    result.push_back(Pair("signeeIDHex", signeealias.GetPubKeyIDHex()));
+    result.push_back(Pair("aliasIDHex", alias.GetPubKeyIDHex()));
 
     CBcValue val;
     if (params.size() > 1)
@@ -213,23 +222,18 @@ Value btcpkiverify(const Array& params, bool fHelp)
       {
 	if (!cert.IsSet())
 	  throw runtime_error("cert not found.\n");
-	val = CBcValue(cert.GetHash());
+	val = CBcValue(cert.GetHash160());
 	uint256 hash;
 	bcert::BitcoinCertData data = cert.cert.data();
 	string ser;
 	data.SerializeToString(&ser);
-	result.push_back(Pair("data", ser));
-	result.push_back(Pair("datasize", (int) sizeof ser[0]));
-	//  fstream output("data.crt");
-	// data.SerializeToOstream(&output);
 	std::vector<unsigned char> vch(ser.begin(),ser.end());
-	result.push_back(Pair("datavch", HexStr(vch)));
-	result.push_back(Pair("datavchsize", (int) sizeof vch[0]));
-	uint256 hash0 = Hash(vch.begin(),vch.end());
-	result.push_back(Pair("datahashGetHex", hash0.GetHex()));
-	result.push_back(Pair("datahashHexStr", HexStr(hash0.begin(),hash0.end())));
+	result.push_back(Pair("data", HexStr(vch)));
+	result.push_back(Pair("datastr", HexStr(ser.begin(),ser.end())));
 	uint160 hash160 = Hash160(vch);
 	result.push_back(Pair("datahash160", HexStr(hash160.begin(),hash160.end())));
+	
+	/*
 	string helloStr("hello");
 	std::vector<unsigned char> hello(helloStr.begin(),helloStr.end());
 	result.push_back(Pair("hellohex", HexStr(hello)));
@@ -250,6 +254,7 @@ Value btcpkiverify(const Array& params, bool fHelp)
 	result.push_back(Pair("hash3", hash3.GetHex()));
 	uint256 hash4(HexStr(hash2));
 	result.push_back(Pair("hash4", hash4.GetHex()));
+	*/
       }
 
     //    CBcValue val(params[1].get_str());
@@ -258,7 +263,6 @@ Value btcpkiverify(const Array& params, bool fHelp)
     bool fSigned = alias.VerifySignature(val,txid);
 
     // compile output
-    result.push_back(Pair("alias", alias.ToJSON()));
     result.push_back(Pair("val", val.ToJSON()));
     result.push_back(Pair("fSigned", fSigned));
     if (fSigned)

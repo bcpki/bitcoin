@@ -11,11 +11,26 @@ using namespace json_spirit;
 
 /* CBcValue */
 
-void CBcValue::init(const uint256& val) {
+void CBcValue::init_uint256(const uint256 val) {
   value = val;
   key.SetSecretByNumber(val);
+  keyID = key.GetPubKey().GetID();
   fSet = true;
 }
+
+bool CBcValue::init_vch(vector<unsigned char> vch) {
+  if (vch.size() > 32)
+    return false;
+  vch.resize(32);
+  uint256 val(vch);
+  init_uint256(val); 
+  return fSet;
+}
+
+bool CBcValue::init_uint160(uint160 val) {
+  std::vector<unsigned char> vch(val.begin(),val.end());
+  return init_vch(vch);
+};
 
 CBcValue::CBcValue(const string& str) {
     if (!IsHex(str))
@@ -24,7 +39,7 @@ CBcValue::CBcValue(const string& str) {
     if (str.size() > 64)
       throw runtime_error("CBcValue::CBcValue:: hex str is more than 64 characters (32 bytes)");
 
-    init(uint256(str));
+    init_uint256(uint256(str));
 }
 
 bool CBcValue::AppearsInScript(const CScript script, bool fFirst) const {
@@ -72,19 +87,19 @@ CScript CBcValue::MakeScript(const vector<CPubKey> owners) const {
     CKey newkey;
     newkey.SetPubKey(owner);
     keys.push_back(newkey);
-  }
+  } 
   script.SetMultisig(keys.size(), keys);
 
   return script;
 };
 
-Object CBcValue::ToJSON() const {
+Object CBcValue::ToJSON() {
   Object result;
-  result.push_back(Pair("value", value.ToString()));
+  result.push_back(Pair("value-LE", GetLEHex()));
   result.push_back(Pair("pubkey", GetPubKeyHex()));
-  std::vector<unsigned char> vch = key.GetPubKey().Raw();
-  result.push_back(Pair("pubkeyraw", HexStr(vch)));
-  result.push_back(Pair("pubkeyhash", Hash(vch.begin(), vch.end()).GetHex()));
+  uint160 hash = Hash160(GetPubKey().Raw());
+  result.push_back(Pair("pubkeyhash", HexStr(hash.begin(),hash.end())));
+  result.push_back(Pair("pubkeyhash", GetPubKeyIDHex()));
   result.push_back(Pair("addr", CBitcoinAddress(GetPubKeyID()).ToString()));
   return result;
 }
@@ -132,7 +147,8 @@ string CAlias::normalize(const string& str) {
     result += c;
     last = c;
   }
-  return BTCPKI_PREFIX + result;
+  //return BTCPKI_PREFIX + result;
+  return result;
 }
 
 CAlias::CAlias(const string& str) {
@@ -140,7 +156,10 @@ CAlias::CAlias(const string& str) {
     {
     name = str;
     normalized = normalize(name);
-    init(Hash(normalized.begin(),normalized.end()));
+    vector<unsigned char> vch(normalized.begin(),normalized.end());
+    hash = Hash160(vch);
+    init_uint160(hash);
+    //init_uint256(Hash(vch.begin(),vch.end()));
     }
 }
 
@@ -212,11 +231,13 @@ bool CAlias::VerifySignature(const CBcValue val, uint256& txidRet) const {
   return val.IsValidInCoins(coins);
 }
   
-Object CAlias::ToJSON() const {
+Object CAlias::ToJSON() {
   Object result;
   result.push_back(Pair("fSet", fSet));
   result.push_back(Pair("str", name));
   result.push_back(Pair("normalized", normalized));
+  result.push_back(Pair("hash", hash.GetHex()));
+  result.push_back(Pair("hashraw", HexStr(hash.begin(),hash.end())));
   result.push_back(Pair("bcvalue", CBcValue::ToJSON()));
   return result;
 }
