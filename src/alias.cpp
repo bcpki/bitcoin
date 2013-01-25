@@ -99,7 +99,7 @@ CScript CBcValue::MakeScript(const vector<CPubKey> owners, const unsigned int nR
 
 Object CBcValue::ToJSON() {
   Object result;
-  result.push_back(Pair("value-LE", GetLEHex()));
+  result.push_back(Pair("bcvalue", GetLEHex()));
   result.push_back(Pair("pubkey", GetPubKeyHex()));
   result.push_back(Pair("pubkeyhash", GetPubKeyIDHex()));
   result.push_back(Pair("addr", CBitcoinAddress(GetPubKeyID()).ToString()));
@@ -175,12 +175,6 @@ string CAlias::addressbookname(pubkey_type type) const {
       return normalized+"_BASE";
     case DERIVED:
       return normalized+"_DERIVED";
-      /*
-    case CERT: // should be deprecated
-      return name+"_CERT_"+BTCPKI_VERSION;
-    default:
-      return "";
-      */
     }
 } 
 
@@ -443,5 +437,7 @@ Object TxidToJSON(const uint256& txid) {
   return result;
 };
 
-  
+/* CoinValues */
+
+
 

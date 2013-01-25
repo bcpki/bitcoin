@@ -51,6 +51,42 @@ pubkey_type rpc_buildtype(const string& name) {
   return type;
 }
 
+vector<vector<unsigned char> > CoinValues(const CCoins coins) {
+  vector<vector<unsigned char> > values;
+  BOOST_FOREACH(const CTxOut &out, coins.vout) {
+    txnouttype typeRet = TX_NONSTANDARD;
+    vector<vector<unsigned char> > vSolutions;
+    if (!Solver(out.scriptPubKey, typeRet, vSolutions))
+      continue;
+    if (typeRet != TX_MULTISIG)
+      continue;
+    if (out.nValue >= BTCPKI_MINAMOUNT)
+      values.push_back(vSolutions[1]);
+  }
+  return values;
+}
+
+void rpc_addtxid(const uint256 txid, Object& result, bool fValues = false) {
+  result.push_back(Pair("txid", txid.ToString()));
+  if (JSONverbose > 0) result.push_back(Pair("tx", TxidToJSON(txid)));
+  CCoins coins;
+  if (!pcoinsTip->GetCoins(txid, coins))
+    throw runtime_error("rpc_addtxid: GetCoins failed.");
+  if ((unsigned int)coins.nHeight == MEMPOOL_HEIGHT)
+    result.push_back(Pair("confirmations", 0));
+  else
+    result.push_back(Pair("confirmations", pcoinsTip->GetBestBlock()->nHeight - coins.nHeight + 1));
+  CBlockIndex *pindex = FindBlockByHeight(coins.nHeight);
+  result.push_back(Pair("strTime", DateTimeStrFormat("%Y-%m-%dT%H:%M:%S", pindex->nTime).c_str()));
+  if (fValues) {
+    vector<vector<unsigned char> > values = CoinValues(coins);
+    BOOST_FOREACH(vector<unsigned char> val, values) {
+      uint160 hash = Hash160(val);
+      result.push_back(Pair("value", HexStr(hash.begin(),hash.end())));
+    }
+  }
+}
+
 // RPCs
 Value bcverify(const Array& params, bool fHelp)
 {
@@ -65,17 +101,11 @@ Value bcverify(const Array& params, bool fHelp)
 
     // build alias
     CAlias alias = rpc_buildalias(params[0].get_str());
-    result.push_back(Pair("alias", alias.ToJSON()));
+    if (JSONverbose > 0) result.push_back(Pair("alias", alias.ToJSON()));
 
     // look for cert for alias, just to inform the caller
     BitcoinCert cert(alias);
-    result.push_back(Pair("cert", cert.ToJSON()));
-    string signee;
-    cert.GetSignee(signee);
-    result.push_back(Pair("signee", signee));
-    CAlias signeealias(signee);
-    result.push_back(Pair("signeeIDHex", signeealias.GetPubKeyIDHex()));
-    result.push_back(Pair("aliasIDHex", alias.GetPubKeyIDHex()));
+    if (JSONverbose > 0) result.push_back(Pair("cert", cert.ToJSON()));
 
     CBcValue val;
     if (params.size() > 1)
@@ -83,18 +113,14 @@ Value bcverify(const Array& params, bool fHelp)
     else
       {
 	if (!cert.IsSet())
-	  return result;
-	//	  throw runtime_error("cert not found.\n");
+	  throw runtime_error("cert not found.\n");
 	val = CBcValue(cert.GetHash160());
 	uint256 hash;
 	bcert::BitcoinCertData data = cert.cert.data();
 	string ser;
 	data.SerializeToString(&ser);
 	std::vector<unsigned char> vch(ser.begin(),ser.end());
-	result.push_back(Pair("data", HexStr(vch)));
-	result.push_back(Pair("datastr", HexStr(ser.begin(),ser.end())));
 	uint160 hash160 = Hash160(vch);
-	result.push_back(Pair("datahash160", HexStr(hash160.begin(),hash160.end())));
 	
 	/*
 	string helloStr("hello");
@@ -124,20 +150,15 @@ Value bcverify(const Array& params, bool fHelp)
  
     uint256 txid;
     bool fSigned = alias.VerifySignature(val,txid);
+    // TODO should also return the outpoint
+    // vector<unsigned int> outs = val.FindInCoins(coins); // default: (int64) BTCPKI_MINAMOUNT, true
 
     // compile output
     if (JSONverbose > 0)
       result.push_back(Pair("val", val.ToJSON()));
     result.push_back(Pair("fSigned", fSigned));
     if (fSigned) {
-      result.push_back(Pair("tx", TxidToJSON(txid)));
-      CCoins coins;
-      if (!pcoinsTip->GetCoins(txid, coins))
-	throw runtime_error("CAlias::VerifySignature: GetCoins failed.");
-      return val.IsValidInCoins(coins);
-      //vector<unsigned int> outs = FindInCoins(coins, (int64) 100*50000, true);
-      vector<unsigned int> outs = val.FindInCoins(coins);
-      result.push_back(Pair("nOut", (int)outs[0]));
+      rpc_addtxid(txid,result);
     }
 
     return result;
@@ -154,7 +175,6 @@ Value bclist(const Array& params, bool fHelp)
 
     // build alias
     CAlias alias = rpc_buildalias(params[0].get_str());
-    result.push_back(Pair("alias", alias.ToJSON()));
       
     // lookup
     uint256 txid;
@@ -162,11 +182,8 @@ Value bclist(const Array& params, bool fHelp)
 
     // compile output
     result.push_back(Pair("fRegistered", fRegistered));
-    if (fRegistered)
-      result.push_back(Pair("tx", TxidToJSON(txid)));
-    if (JSONverbose > 0) {
-      result.push_back(Pair("alias", alias.ToJSON()));
-    }
+    if (JSONverbose > 0) result.push_back(Pair("alias", alias.ToJSON()));
+    if (fRegistered) rpc_addtxid(txid,result,true);
     
     return result;
 }
@@ -283,7 +300,7 @@ Value bcsign(const Array& params, bool fHelp)
       if (find_value(aliasObj, "alias").type() == null_type)
         throw JSONRPCError(-8, "alias missing");
       aliasStr = find_value(aliasObj, "alias").get_str();
-      result.push_back(Pair("aliasStr", aliasStr));
+      if (JSONverbose > 0) result.push_back(Pair("aliasStr", aliasStr));
   
       // count owners
       if (find_value(aliasObj, "owners").type() != null_type) {
@@ -310,8 +327,10 @@ Value bcsign(const Array& params, bool fHelp)
   	  throw JSONRPCError(-8, "n must be <= number of owners");
       }
   
-      result.push_back(Pair("nOwners", (int)nOwners));
-      result.push_back(Pair("nReq", (int)nReq));
+      if (JSONverbose > 0) {
+	result.push_back(Pair("nOwners", (int)nOwners));
+	result.push_back(Pair("nReq", (int)nReq));
+      }
       // collect owners
       // external owners first
       if (find_value(aliasObj, "owners").type() != null_type) {
@@ -336,10 +355,13 @@ Value bcsign(const Array& params, bool fHelp)
     }
     
     // build alias
-    CAlias alias(aliasStr);
-    if (!alias.IsSet())
-      throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC getregistrations: alias may contain only characters a-z,A-Z,0-1,_,-, must start with letter and not end in _,-");
-    result.push_back(Pair("aliasArg", alias.ToJSON()));
+    CAlias alias = rpc_buildalias(aliasStr);
+    if (JSONverbose > 0) result.push_back(Pair("aliasArg", alias.ToJSON()));
+      
+    // test lookup
+    uint256 txid;
+    //    if (!(JSONverbose > 0) && alias.Lookup(txid))
+    //  throw runtime_error("RPC bcsign: valid signature already present in blockchain. not signing again.");
 
     // collect values including alias
     vector<CBcValue> values (1,alias);
@@ -360,7 +382,7 @@ Value bcsign(const Array& params, bool fHelp)
     // add cert value
     if (fCertVal) {
       BitcoinCert cert(alias);
-      result.push_back(Pair("cert", cert.ToJSON()));
+      if (JSONverbose > 0) result.push_back(Pair("cert", cert.ToJSON()));
       /*
       string signee;
       cert.GetSignee(signee);
@@ -382,28 +404,34 @@ Value bcsign(const Array& params, bool fHelp)
       owners.push_back(owner);
       ownerArray.push_back(PubKeyToJSON(owner));
     }
-    result.push_back(Pair("owners", ownerArray));
+    if (JSONverbose > 0) result.push_back(Pair("owners", ownerArray));
 
     // build output scripts
     vector<pair<CScript,int64> > vecSend;
     Array outs;
     BOOST_FOREACH(CBcValue val, values)
       {
-	pair<CScript,int64> out (val.MakeScript(owners,nReq),100*50000); // require nReq of the owner keys (currently 1 or 2) 
+	pair<CScript,int64> out (val.MakeScript(owners,nReq),BTCPKI_MINAMOUNT); // require nReq of the owner keys (currently 1 or 2) 
 	vecSend.push_back(out);
 	Object entry;
 	entry.push_back(Pair("value",val.ToJSON()));
 	entry.push_back(Pair("script",ScriptToJSON(out.first)));
-	entry.push_back(Pair("nAmount",100*50000));
+	entry.push_back(Pair("nAmount",BTCPKI_MINAMOUNT));
 	outs.push_back(entry);
       }
-    result.push_back(Pair("outs", outs));
+    if (JSONverbose > 0) result.push_back(Pair("outs", outs));
 
     // Wallet comments
     CWalletTx wtx;
-    wtx.mapValue["comment"] = "signature v";
-    wtx.mapValue["comment"] += BTCPKI_VERSION;
-    wtx.mapValue["comment"] += ": " + alias.GetName();
+    wtx.mapValue["BTCPKI"] = string("v") + BTCPKI_VERSION;
+    wtx.mapValue["signature"] = alias.GetName();
+    // values are needed later to spend the outputs for revocation (they need to be imported as privkeys) 
+    wtx.mapValue["bcvalues"] = "";
+    BOOST_FOREACH(CBcValue val, values)
+      wtx.mapValue["bcvalues"] += val.GetLEHex() + " ";
+    wtx.mapValue["owners"] = "";
+    BOOST_FOREACH(CPubKey owner, owners)
+      wtx.mapValue["owners"] += HexStr(owner.Raw()) + " ";
 
     // create transaction
     CReserveKey keyChange(pwalletMain);
@@ -411,6 +439,7 @@ Value bcsign(const Array& params, bool fHelp)
     if (!pwalletMain->CreateTransaction(vecSend,wtx,keyChange,nFeeRequired))
       throw JSONRPCError(RPC_WALLET_ERROR, "Transaction creation failed. Sufficient funds?");
     result.push_back(Pair("nFee", ValueFromAmount(nFeeRequired)));
+    if (JSONverbose > 0) result.push_back(Pair("changeKey", PubKeyToJSON(keyChange.GetReservedKey())));
 
     // commit
     if (!pwalletMain->CommitTransaction(wtx, keyChange))

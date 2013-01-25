@@ -15,6 +15,7 @@
 #define BTCPKI_VERSION "0.3"
 #define BTCPKI_PREFIX "v0.3_"
 #define BTCPKI_TESTNETONLY true
+#define BTCPKI_MINAMOUNT 100*50000
 
 // debug flag, true produces more output than necessary in JSON return objects
 const unsigned int JSONverbose = 0;
@@ -52,7 +53,7 @@ public:
   CKeyID GetPubKeyID() const { return keyID; };
   std::string GetPubKeyHex() const { return HexStr(key.GetPubKey().Raw()); };
   bool AppearsInScript(const CScript script, bool fFirst = true) const;
-  std::vector<unsigned int> FindInCoins(const CCoins coins, const int64 minamount = 100*50000,  bool fFirst = true) const;
+  std::vector<unsigned int> FindInCoins(const CCoins coins, const int64 minamount = BTCPKI_MINAMOUNT,  bool fFirst = true) const;
   bool IsValidInCoins(const CCoins coins) const;
   CScript MakeScript(const std::vector<CPubKey> owners, const unsigned int nReq = 0) const;
   // should be const, but begin(),end() are not const

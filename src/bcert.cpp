@@ -93,26 +93,31 @@ Object ReadCertFile(const string filename)
 bool BitcoinCert::init(const string name) {
   boost::filesystem::path path = GetDataDir() / "bcerts" / (name + ".bcrt");
   boost::filesystem::ifstream file(path);
-  fSigneeMatch = false;
+  if (!file.good())
+    throw runtime_error("BitcoinCert::init: file not found: " + name + ".bcrt");
 
-  if ((!file.good()) || (!cert.ParseFromIstream(&file)))
-    return (fSet = false);
-  else
-    fSet = true;
+  if (!cert.ParseFromIstream(&file))
+    throw runtime_error("BitcoinCert::init: could not parse: " + name + ".bcrt");
 
+  fSet = true;
+
+  // TODO more than one signee
   string signee;
-  GetSignee(signee);
+  if (!GetSignee(signee))
+    throw runtime_error("BitcoinCert::init: no BTCPKI signature found: " + name + ".bcrt");
+
   fSigneeMatch = (CAlias(signee).GetPubKeyIDHex() == name); 
 
+  if (!fSigneeMatch)
+    throw runtime_error("BitcoinCert::init: BTCPKI signee does not match filename: " + name + ".bcrt");
+
   return true;
-  //result.push_back(Pair("path",pathCert.string()));
-  //result.push_back(Pair("good",file.good()));
 }
 
 BitcoinCert::BitcoinCert(CAlias alias) {
   init(alias.GetPubKeyIDHex());
   
-  /*
+  /* deprecated
   if (!init(alias.GetPubKeyHex()))
     if (!init(alias.GetLEHex()))
       if (!init(alias.GetNormalized()))

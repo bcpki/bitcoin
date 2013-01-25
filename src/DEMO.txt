@@ -1,5 +1,5 @@
 # check if foo already has its signatures in the blockchain (bclist=blockchainlist)
-@onlinemachine: ./bitcoind -testnet bclist foo
+@onlinemachine: ./bitcoind -testnet bclist foo0
 {
     "alias" : {
         "normalized" : "v0.3_F0",
@@ -7,6 +7,27 @@
     },
     "fRegistered" : false
 }
+
+# check if we already have a base key (for pay-to-contract) for foo in our wallet
+@offlinemachine: ./bitcoind -testnet aliasget foo0 base
+[
+]
+
+# create such a base key
+@onlinemachine: ./bitcoind -testnet aliasnew foo0 base
+[
+    "03dd14ca69d3046aa821fe2cbc61b821c40928f54947e07661762326a273f4a56b"
+]
+
+# make a cert including the base keys
+@onlinemachine: wget -O - "http://btcrypt.org/cgi-bin/set.cgi?alias=foo0&subject=Foo+inc.&email=contact@foo.com&url=http%3a%2f%2ffoo.com&pubkey1=03dd14ca69d3046aa821fe2cbc61b821c40928f54947e07661762326a273f4a56b&pubkey2=03dd14ca69d3046aa821fe2cbc61b821c40928f54947e07661762326a273f4a56b&pubkey3=03dd14ca69d3046aa821fe2cbc61b821c40928f54947e07661762326a273f4a56b"
+
+@onlinemachine: wget -P ~/.bitcoin/testnet3/bcerts "http://btcrypt.org/certs/c9d1e59cdf3fcef8ac4c9ecaf1a80f68738d2b50.bcrt"
+# 
+[
+    "03dd14ca69d3046aa821fe2cbc61b821c40928f54947e07661762326a273f4a56b"
+]
+
 
 # create a new owner (=revocation key) for foo
 @onlinemachine: ./bitcoind -testnet aliasnew foo owner 
@@ -20,19 +41,7 @@
     "02917b8cdd44925b88ef6f3e63667d408928daab18ebc9bfd350290723a28a3739"
 ]
 
-# create P2C base key -> account normalized_BASE, derived ones are normalized_DERIVED or normalized<ticket> 
-@onlinemachine: ./bitcoind -testnet aliasnew foo base 
-[
-    "03dd14ca69d3046aa821fe2cbc61b821c40928f54947e07661762326a273f4a56b"
-]
 
-# double-check if owner is in the proper account
-@onlinemachine: ./bitcoind -testnet aliasget foo owner 
-[
-    "03dd14ca69d3046aa821fe2cbc61b821c40928f54947e07661762326a273f4a56b"
-]
-
-# now make cert
 
 =====
 
