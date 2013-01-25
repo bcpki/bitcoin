@@ -57,7 +57,7 @@ message BitcoinCertData {
     }
     optional Usage usage = 1;
     required Algorithm algorithm = 2;
-    required bytes value = 3;
+    repeated bytes value = 3;
   }
   required string version = 1 [default = "0.2"];
   optional string subjectname = 2;

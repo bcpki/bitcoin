@@ -1,5 +1,20 @@
+http://www.fileformat.info/tool/hash.htm
+http://gobittest.appspot.com/Address
+
+INSTALL
+-------
+cd bcert
+protoc --cpp_out=.. bcert.proto
+cd ..
+mv bcert.pb.cc bcert.pb.cpp
+ 
 CHANGES
 -------
+Makefile:
+  bcert.o
+  alias.o
+  bcert.pb.o
+  -l libprotobuf
 bitcoinrpc.cpp .h:
   registeralias
   getregistrations

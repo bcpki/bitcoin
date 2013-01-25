@@ -12,11 +12,14 @@
 #include <boost/assign/list_of.hpp>
 
 #define BTCPKI_ALIAS "alias"
-#define BTCPKI_VERSION "0.2"
-#define BTCPKI_PREFIX "v0.2_"
+#define BTCPKI_VERSION "0.3"
+#define BTCPKI_PREFIX "v0.3_"
 #define BTCPKI_TESTNETONLY true
 
-enum pubkey_type { ADDR, OWNER, CERT };
+// debug flag, true produces more output than necessary in JSON return objects
+const unsigned int JSONverbose = 0;
+
+enum pubkey_type { ADDR, OWNER, BASE, DERIVED };
 
 class CRegistration;
 
@@ -40,7 +43,7 @@ public:
   explicit CBcValue(const uint256 val) { init_uint256(val); };
   // should be const, but begin(),end() are not const
   explicit CBcValue(uint160 val) { init_uint160(val); };
-  explicit CBcValue(const std::string& str); // requires hex string up to 64 characters (32 bytes)
+  explicit CBcValue(const std::string& str); // requires hex string up to 64 characters (32 bytes), interpreted as little-endian number
 
   bool IsSet() const { return fSet; };
   uint256 GetValue() const { return value; };
@@ -49,16 +52,16 @@ public:
   CKeyID GetPubKeyID() const { return keyID; };
   std::string GetPubKeyHex() const { return HexStr(key.GetPubKey().Raw()); };
   bool AppearsInScript(const CScript script, bool fFirst = true) const;
-  std::vector<unsigned int> FindInCoins(const CCoins coins, const int64 minamount,  bool fFirst = true) const;
+  std::vector<unsigned int> FindInCoins(const CCoins coins, const int64 minamount = 100*50000,  bool fFirst = true) const;
   bool IsValidInCoins(const CCoins coins) const;
-  CScript MakeScript(const std::vector<CPubKey> owners) const;
+  CScript MakeScript(const std::vector<CPubKey> owners, const unsigned int nReq = 0) const;
   // should be const, but begin(),end() are not const
   //  std::string GetPubKeyIDHex() { const std::vector<unsigned char> vch(keyID.begin(),keyID.end()); return HexStr(vch); };
   std::string GetPubKeyIDHex() { return HexStr(keyID.begin(),keyID.end()); };
   //std::string GetLEHex() { const std::vector<unsigned char> vch(value.begin(),value.end()); return HexStr(vch); }; // little-endian hex string
   std::string GetLEHex() { return HexStr(value.begin(),value.end()); }; // little-endian hex string
+  std::string addressbookname() { return GetLEHex() + "_VALUE"; }; 
   json_spirit::Object ToJSON();
-  //std::string GetLEHex() const { return HexStr(value.Raw()); }; // little-endian hex string
 };
 
 class CAlias: public CBcValue 

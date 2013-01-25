@@ -256,12 +256,13 @@ static const CRPCCommand vRPCCommands[] =
     { "gettxout",               &gettxout,               true,   false },
     { "lockunspent",            &lockunspent,            false,  false },
     { "listlockunspent",        &listlockunspent,        false,  false },
-// BTCPKI
-    { "registeralias",          &registeralias,          true,   true  },
-    { "btcpkisign",             &btcpkisign,             true,   true  },
-    { "sendtoaliasowner",       &sendtoaliasowner,       true,   true  },
-    { "getregistrations",       &getregistrations,       true,   false },
-    { "btcpkiverify",           &btcpkiverify,           true,   false },
+// BTCPKI TODO unlocked? why is createmultisig unlocked?
+    { "bcsign",                 &bcsign,                 false,  false },
+    { "bclist",                 &bclist,                 false,  false },
+    { "aliasget",               &aliasget,               false,  false },
+    { "aliasnew",               &aliasnew,               false,  false },
+    { "sendtoaliasowner",       &sendtoaliasowner,       false,  false },
+    { "bcverify",               &bcverify,               false,  false },
     { "importticket",           &importticket,           false,  false },
 };
 
@@ -1228,8 +1229,12 @@ Array RPCConvertValues(const std::string &strMethod, const std::vector<std::stri
     if (strMethod == "lockunspent"            && n > 1) ConvertTo<Array>(params[1]);
     if (strMethod == "importprivkey"          && n > 2) ConvertTo<bool>(params[2]);
 //BTCPKI
+    if (strMethod == "aliasnew"               && n > 2) ConvertTo<int>(params[2]);
+    if (strMethod == "bcsign"                 && n > 0) ConvertTo<Object>(params[0]);
+    if (strMethod == "bcsign"                 && n > 1) ConvertTo<Array>(params[1]);
     if (strMethod == "sendtoaliasowner"       && n > 1) ConvertTo<double>(params[1]);
-    if (strMethod == "importticket"           && n > 2) ConvertTo<bool>(params[3]);
+    if (strMethod == "importticket"           && n > 3) ConvertTo<bool>(params[3]);
+    if (strMethod == "getnewaddress"          && n > 1) ConvertTo<bool>(params[1]);
 
     return params;
 }

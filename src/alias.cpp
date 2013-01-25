@@ -1,5 +1,6 @@
 //#include <locale>
 #include "alias.h"
+#include "util.h" // ParseHex
 #include "hash.h" // Hash
 #include "base58.h" // CBitcoinAddress
 #include "txdb.h" // GetFirstMatch
@@ -39,7 +40,7 @@ CBcValue::CBcValue(const string& str) {
     if (str.size() > 64)
       throw runtime_error("CBcValue::CBcValue:: hex str is more than 64 characters (32 bytes)");
 
-    init_uint256(uint256(str));
+    init_vch(ParseHex(str));
 }
 
 bool CBcValue::AppearsInScript(const CScript script, bool fFirst) const {
@@ -76,19 +77,22 @@ vector<unsigned int> CBcValue::FindInCoins(const CCoins coins, const int64 minam
 }
 
 bool CBcValue::IsValidInCoins(const CCoins coins) const {
-  std::vector<unsigned int> outs = FindInCoins(coins, (int64) 100*50000, true);
+  std::vector<unsigned int> outs = FindInCoins(coins); // use defaults for optional arguments, should be minamount=100*50000, fFirst=true
   return (outs.size() > 0);
 }
 
-CScript CBcValue::MakeScript(const vector<CPubKey> owners) const {
+CScript CBcValue::MakeScript(const vector<CPubKey> owners, const unsigned int nReq) const {
   CScript script;
   vector<CKey> keys (1,key);
   BOOST_FOREACH(const CPubKey owner, owners) {
     CKey newkey;
     newkey.SetPubKey(owner);
     keys.push_back(newkey);
-  } 
-  script.SetMultisig(keys.size(), keys);
+  }
+  if (nReq == 0)
+    script.SetMultisig(keys.size(), keys); // default: require all keys
+  else
+    script.SetMultisig(nReq+1, keys); // require n of owners + the value key itself 
 
   return script;
 };
@@ -97,8 +101,6 @@ Object CBcValue::ToJSON() {
   Object result;
   result.push_back(Pair("value-LE", GetLEHex()));
   result.push_back(Pair("pubkey", GetPubKeyHex()));
-  uint160 hash = Hash160(GetPubKey().Raw());
-  result.push_back(Pair("pubkeyhash", HexStr(hash.begin(),hash.end())));
   result.push_back(Pair("pubkeyhash", GetPubKeyIDHex()));
   result.push_back(Pair("addr", CBitcoinAddress(GetPubKeyID()).ToString()));
   return result;
@@ -147,8 +149,7 @@ string CAlias::normalize(const string& str) {
     result += c;
     last = c;
   }
-  //return BTCPKI_PREFIX + result;
-  return result;
+  return BTCPKI_PREFIX + result;
 }
 
 CAlias::CAlias(const string& str) {
@@ -167,13 +168,19 @@ string CAlias::addressbookname(pubkey_type type) const {
   switch (type)
     {
     case ADDR:
-      return name+"_ADDR_"+BTCPKI_VERSION;
+      return normalized+"_ADDR";
     case OWNER:
-      return name+"_OWNER_"+BTCPKI_VERSION;
-    case CERT:
+      return normalized+"_OWNER";
+    case BASE:
+      return normalized+"_BASE";
+    case DERIVED:
+      return normalized+"_DERIVED";
+      /*
+    case CERT: // should be deprecated
       return name+"_CERT_"+BTCPKI_VERSION;
     default:
       return "";
+      */
     }
 } 
 
@@ -233,12 +240,14 @@ bool CAlias::VerifySignature(const CBcValue val, uint256& txidRet) const {
   
 Object CAlias::ToJSON() {
   Object result;
-  result.push_back(Pair("fSet", fSet));
-  result.push_back(Pair("str", name));
   result.push_back(Pair("normalized", normalized));
-  result.push_back(Pair("hash", hash.GetHex()));
-  result.push_back(Pair("hashraw", HexStr(hash.begin(),hash.end())));
-  result.push_back(Pair("bcvalue", CBcValue::ToJSON()));
+  result.push_back(Pair("pubkeyhash", GetPubKeyIDHex()));
+  if (JSONverbose > 0) {
+    result.push_back(Pair("fSet", fSet));
+    result.push_back(Pair("str", name));
+    result.push_back(Pair("hash160", HexStr(hash.begin(),hash.end())));
+    result.push_back(Pair("bcvalue", CBcValue::ToJSON()));
+  }
   return result;
 }
 
@@ -363,6 +372,8 @@ Object CRegistration::ToJSON() const {
 Object PubKeyToJSON(const CPubKey& key) {
   Object result;
   result.push_back(Pair("pubkey", HexStr(key.Raw())));
+  CKeyID id = key.GetID();
+  result.push_back(Pair("hash160", HexStr(id.begin(),id.end())));
   result.push_back(Pair("addr", CBitcoinAddress(key.GetID()).ToString()));
   return result;
 };
