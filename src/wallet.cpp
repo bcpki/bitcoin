@@ -1005,9 +1005,9 @@ static void ApproximateBestSubset(vector<pair<int64, pair<const CWalletTx*,unsig
 }
 
 bool CWallet::SelectCoinsMinConf(int64 nTargetValue, int nConfMine, int nConfTheirs, vector<COutput> vCoins,
-                                 set<pair<const CWalletTx*,unsigned int> >& setCoinsRet, int64& nValueRet) const
+                                 set<pair<const CWalletTx*,unsigned int> >& setCoinsRet, int64& nValueRet, bool fClear) const // BCPKI
 {
-    setCoinsRet.clear();
+    if (fClear) setCoinsRet.clear(); // BCPKI
     nValueRet = 0;
 
     // List of values less than target
@@ -1016,6 +1016,15 @@ bool CWallet::SelectCoinsMinConf(int64 nTargetValue, int nConfMine, int nConfThe
     coinLowestLarger.second.first = NULL;
     vector<pair<int64, pair<const CWalletTx*,unsigned int> > > vValue;
     int64 nTotalLower = 0;
+
+    // BCPKI begin patch
+    BOOST_FOREACH(const PAIRTYPE(const CWalletTx*,unsigned int) precoin, setCoinsRet) {
+      nValueRet += precoin.first->vout[precoin.second].nValue;
+    }
+    if (nValueRet > nTargetValue)
+      return true;
+    nTargetValue -= nValueRet; // remaining target, continue as usual (fClear = true)
+    // end patch
 
     random_shuffle(vCoins.begin(), vCoins.end(), GetRandInt);
 
@@ -1103,20 +1112,20 @@ bool CWallet::SelectCoinsMinConf(int64 nTargetValue, int nConfMine, int nConfThe
     return true;
 }
 
-bool CWallet::SelectCoins(int64 nTargetValue, set<pair<const CWalletTx*,unsigned int> >& setCoinsRet, int64& nValueRet) const
+bool CWallet::SelectCoins(int64 nTargetValue, set<pair<const CWalletTx*,unsigned int> >& setCoinsRet, int64& nValueRet, bool fClear) const // BCPKI
 {
     vector<COutput> vCoins;
     AvailableCoins(vCoins);
 
-    return (SelectCoinsMinConf(nTargetValue, 1, 6, vCoins, setCoinsRet, nValueRet) ||
-            SelectCoinsMinConf(nTargetValue, 1, 1, vCoins, setCoinsRet, nValueRet) ||
-            SelectCoinsMinConf(nTargetValue, 0, 1, vCoins, setCoinsRet, nValueRet));
+    return (SelectCoinsMinConf(nTargetValue, 1, 6, vCoins, setCoinsRet, nValueRet, fClear) ||
+            SelectCoinsMinConf(nTargetValue, 1, 1, vCoins, setCoinsRet, nValueRet, fClear) ||
+            SelectCoinsMinConf(nTargetValue, 0, 1, vCoins, setCoinsRet, nValueRet, fClear));
 }
 
 
 
 
-bool CWallet::CreateTransaction(const vector<pair<CScript, int64> >& vecSend, CWalletTx& wtxNew, CReserveKey& reservekey, int64& nFeeRet)
+bool CWallet::CreateTransaction(const vector<pair<CScript, int64> >& vecSend, CWalletTx& wtxNew, CReserveKey& reservekey, int64& nFeeRet, const vector<COutPoint>& vecSpend)
 {
     int64 nValue = 0;
     BOOST_FOREACH (const PAIRTYPE(CScript, int64)& s, vecSend)
@@ -1125,7 +1134,8 @@ bool CWallet::CreateTransaction(const vector<pair<CScript, int64> >& vecSend, CW
             return false;
         nValue += s.second;
     }
-    if (vecSend.empty() || nValue < 0)
+
+    if ((vecSend.empty() && vecSpend.empty()) || nValue < 0) // BCPKI
         return false;
 
     wtxNew.BindWallet(this);
@@ -1149,7 +1159,15 @@ bool CWallet::CreateTransaction(const vector<pair<CScript, int64> >& vecSend, CW
                 // Choose coins to use
                 set<pair<const CWalletTx*,unsigned int> > setCoins;
                 int64 nValueIn = 0;
-                if (!SelectCoins(nTotalValue, setCoins, nValueIn))
+		// BCPKI begin patch
+		// vecSpend first
+		BOOST_FOREACH(const COutPoint outp, vecSpend) {
+		  CWalletTx* wtx = &(mapWallet[outp.hash]);
+		  pair<const CWalletTx*,unsigned int> coin = make_pair(wtx,outp.n);
+		  setCoins.insert(coin);
+		}
+		// end patch
+                if (!SelectCoins(nTotalValue, setCoins, nValueIn, false))
                     return false;
                 BOOST_FOREACH(PAIRTYPE(const CWalletTx*, unsigned int) pcoin, setCoins)
                 {
@@ -1202,7 +1220,8 @@ bool CWallet::CreateTransaction(const vector<pair<CScript, int64> >& vecSend, CW
                 int nIn = 0;
                 BOOST_FOREACH(const PAIRTYPE(const CWalletTx*,unsigned int)& coin, setCoins)
                     if (!SignSignature(*this, *coin.first, wtxNew, nIn++))
-                        return false;
+		      throw runtime_error("could not sign transaction");
+		//                        return false;
 
                 // Limit size
                 unsigned int nBytes = ::GetSerializeSize(*(CTransaction*)&wtxNew, SER_NETWORK, PROTOCOL_VERSION);

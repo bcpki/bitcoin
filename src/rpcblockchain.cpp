@@ -5,7 +5,7 @@
 
 #include "main.h"
 #include "bitcoinrpc.h"
-//BTCPKI
+//BCPKI
 #include "alias.h" 
 #include "bcert.h"  
 //temporary

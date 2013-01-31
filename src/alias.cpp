@@ -43,6 +43,12 @@ CBcValue::CBcValue(const string& str) {
     init_vch(ParseHex(str));
 }
 
+string CBcValue::GetPrivKeyB58() const {
+  bool fCompressed;
+  CSecret secret = key.GetSecret(fCompressed);
+  return CBitcoinSecret(secret,fCompressed).ToString();
+} 
+
 bool CBcValue::AppearsInScript(const CScript script, bool fFirst) const {
   txnouttype typeRet = TX_NONSTANDARD;
   vector<vector<unsigned char> > vSolutions;
@@ -97,12 +103,19 @@ CScript CBcValue::MakeScript(const vector<CPubKey> owners, const unsigned int nR
   return script;
 };
 
+void CBcValue::_toJSON(Object& result) {
+  result.push_back(Pair("bcvalue", GetLEHex()));
+  bool fCompressed;
+  CSecret secret = key.GetSecret(fCompressed); 
+  result.push_back(Pair("privkey", CBitcoinSecret(secret,fCompressed).ToString())); 
+  result.push_back(Pair("pubkey", GetPubKeyHex()));
+  result.push_back(Pair("id", GetPubKeyIDHex()));
+  result.push_back(Pair("addr", CBitcoinAddress(GetPubKeyID()).ToString()));
+}
+
 Object CBcValue::ToJSON() {
   Object result;
-  result.push_back(Pair("bcvalue", GetLEHex()));
-  result.push_back(Pair("pubkey", GetPubKeyHex()));
-  result.push_back(Pair("pubkeyhash", GetPubKeyIDHex()));
-  result.push_back(Pair("addr", CBitcoinAddress(GetPubKeyID()).ToString()));
+  _toJSON(result);
   return result;
 }
 
@@ -149,7 +162,7 @@ string CAlias::normalize(const string& str) {
     result += c;
     last = c;
   }
-  return BTCPKI_PREFIX + result;
+  return BCPKI_SIGPREFIX + result;
 }
 
 CAlias::CAlias(const string& str) {
@@ -176,6 +189,8 @@ string CAlias::addressbookname(pubkey_type type) const {
     case DERIVED:
       return normalized+"_DERIVED";
     }
+  throw runtime_error("CAlias::addressbookname: unknown type.");
+  return "";
 } 
 
 /* deprecated
@@ -234,19 +249,19 @@ bool CAlias::VerifySignature(const CBcValue val, uint256& txidRet) const {
   
 Object CAlias::ToJSON() {
   Object result;
-  result.push_back(Pair("normalized", normalized));
-  result.push_back(Pair("pubkeyhash", GetPubKeyIDHex()));
   if (JSONverbose > 0) {
-    result.push_back(Pair("fSet", fSet));
     result.push_back(Pair("str", name));
-    result.push_back(Pair("hash160", HexStr(hash.begin(),hash.end())));
-    result.push_back(Pair("bcvalue", CBcValue::ToJSON()));
+    result.push_back(Pair("fSet", fSet));
   }
+  result.push_back(Pair("normalized", normalized));
+  _toJSON(result);
+  result.push_back(Pair("owner account", addressbookname(OWNER)));
   return result;
 }
 
 /* CRegistrationEntry */
 
+/* deprecated 26.1.13
 CRegistrationEntry::CRegistrationEntry(const CAlias& alias, const CPubKey& owner, const uint256& certhash) {
   aliasKey = alias.GetKey();
   ownerKey.SetPubKey(owner);
@@ -268,6 +283,7 @@ CScript CRegistrationEntry::GetScript() const {
 
   return script;
 };
+*/
   
 /* deprecated
 bool CRegistrationEntry::SetByScript(const CScript& scriptPubKey) {
@@ -291,6 +307,7 @@ bool CRegistrationEntry::SetByScript(const CScript& scriptPubKey) {
 }
 */
 
+/* deprecated 26.1.13
 int64 CRegistrationEntry::GetNValue() const {
   CCoins coins;
   pcoinsTip->GetCoins(outpt.hash, coins);
@@ -315,6 +332,7 @@ Object CRegistrationEntry::ToJSON() const {
     }
   return result;
 }
+*/
 
 /* CRegistration */
 
@@ -339,6 +357,7 @@ bool CRegistration::Lookup(const CAlias& alias) {
 };
 */
 
+/* deprecated 26.1.13
 Object CRegistration::ToJSON() const {
   Object result;
   result.push_back(Pair("fBacked", fBacked));
@@ -360,6 +379,7 @@ Object CRegistration::ToJSON() const {
   
   return result;
 }
+*/
 
 /* CPubKey */
 
@@ -436,8 +456,6 @@ Object TxidToJSON(const uint256& txid) {
   result.push_back(Pair("txid", txid.ToString()));
   return result;
 };
-
-/* CoinValues */
 
 
 

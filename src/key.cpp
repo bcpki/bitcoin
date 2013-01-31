@@ -8,7 +8,7 @@
 #include <openssl/obj_mac.h>
 
 #include "key.h"
-// BTCPKI
+// BCPKI
 #include "bignum.h"
 
 // Generate a private key from just the secret parameter
@@ -208,7 +208,7 @@ bool CKey::SetPrivKey(const CPrivKey& vchPrivKey)
     return false;
 }
 
-// BTCPKI
+// BCPKI
 CKey CKey::GetDerivedKey(const uint256& ticket, bool fCompressed) const
 {
   CKey key;

@@ -3,7 +3,7 @@ package bcert;
 message BitcoinCertSignature {
   message SignatureAlgorithm {
     enum SignatureAlgorithmType {
-      BTCPKI = 1;
+      BCPKI = 1;
       PKCS1SHA1 = 2;
     }
     required SignatureAlgorithmType type = 1;
@@ -47,9 +47,10 @@ message BitcoinCertData {
     }
     message Algorithm {
       enum Type {
-        BTCPKISINGLE = 1;
-        BTCPKIMULTI = 2;
-        BTCPKISCRIPT = 3;
+        BCPKISINGLE = 1;
+        BCPKIMULTI = 2;
+        BCPKISCRIPT = 3;
+	STATIC_BTCADDR = 4;
         PKCS1 = 100;
       }
       required Type type = 1;
@@ -59,7 +60,7 @@ message BitcoinCertData {
     required Algorithm algorithm = 2;
     repeated bytes value = 3;
   }
-  required string version = 1 [default = "0.2"];
+  required string version = 1;
   optional string subjectname = 2;
   optional Validity validity = 3;
   repeated Contact contacts = 4;
@@ -69,7 +70,7 @@ message BitcoinCertData {
 }
 
 message BitcoinCert {
-  required string version = 1 [default = "0.2"];
+  optional string version = 1;
   required BitcoinCertData data = 2;
   repeated BitcoinCertSignature signatures = 3;
 }

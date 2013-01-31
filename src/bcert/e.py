@@ -37,26 +37,20 @@ def pubkey2point(hexstr):
 def point2pubkey(p):
     x_str = util.number_to_string(p.x(), G.order())
     y_str = util.number_to_string(p.y(), G.order())
-    return (chr(2 + (p.y() & 1)) + x_str).encode('hex')
+    return (chr(2 + (p.y() & 1)) + x_str)
 
 # convert point to address
 def point2addr(p):
     return pubkey2addr(point2pubkey(p))
 
 # convert compressed pubkey to address
-def pubkey2addr(hexstr): 
-    return bitcoin.public_key_to_bc_address(hexstr.decode('hex'))
+def pubkey2addr(pubkey): 
+    return bitcoin.public_key_to_bc_address(pubkey)
+
+# little-endian binary value (e.g. hash)
+def hash2int(val):
+  return int(val[::-1].encode('hex'),16)
 
 # derived pubkey  
-def hash2pubkey(hexstr):
-   return point2pubkey(int(hexstr,16)*G)
-
-def hash2addr(hexstr):
-   return point2addr(int(hexstr,16)*G)
-
-# examples
-goo = '0211b60f23135a806aff2c8f0fbbe620c16ba05a9ca4772735c08a16407f185b34' # goo owner pubkey (compressed)
-goo4 = '03046d258651af2fbb6acb63414a604314ce94d644a0efd8832ca5275f2bc207c6' # goo4 owner pubkey (compressed)
-
-certhash = 'fc0c347ea3906d4883d499eaccec1f4318a3d68129034938cb53949260bb1ee6'
-hash2pubkey(certhash)
+def derivepubkey(hash):
+   return point2pubkey(hash2int(hash)*G)
