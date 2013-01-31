@@ -47,9 +47,9 @@ message BitcoinCertData {
     }
     message Algorithm {
       enum Type {
-        BCPKISINGLE = 1;
-        BCPKIMULTI = 2;
-        BCPKISCRIPT = 3;
+        P2CSINGLE = 1;
+        P2CMULTI = 2;
+        P2CCRIPT = 3;
 	STATIC_BTCADDR = 4;
         PKCS1 = 100;
       }

@@ -1236,7 +1236,9 @@ Array RPCConvertValues(const std::string &strMethod, const std::vector<std::stri
     if (strMethod == "aliasnew"               && n > 2) ConvertTo<int>(params[2]);
     if (strMethod == "bcsign"                 && n > 0) ConvertTo<Object>(params[0]);
     if (strMethod == "bcsign"                 && n > 1) ConvertTo<Array>(params[1]);
-    if (strMethod == "sendtoalias"            && n > 1) ConvertTo<double>(params[1]);
+    if (strMethod == "sendtoalias"            && n > 2) ConvertTo<Array>(params[1]); // method
+    if (strMethod == "sendtoalias"            && n > 2) ConvertTo<double>(params[2]); // amount
+    if (strMethod == "sendtoalias"            && n > 3) ConvertTo<int>(params[3]); // minconf
     if (strMethod == "spendoutpoint"          && n > 1) ConvertTo<int>(params[1]);
     if (strMethod == "importticket"           && n > 3) ConvertTo<bool>(params[3]);
 

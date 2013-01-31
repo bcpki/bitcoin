@@ -351,7 +351,6 @@ Value bclist(const Array& params, bool fHelp)
 
     // build alias
     CAlias alias = rpc_buildalias(params[0].get_str());
-    return result;
       
     // lookup
     uint256 txid;
@@ -596,6 +595,7 @@ Value bcsigncert(const Array& params, bool fHelp)
   // sign
   CWalletTx wtx;
   Value result = rpc_bcsign(values,1,1,owners,wtx);
+  result.get_obj().push_back(Pair("fname",alias.GetPubKeyIDHex()));
 
   // additional wallet comments
   wtx.mapValue["signature"] = alias.GetName();
@@ -619,33 +619,67 @@ Value bcsigncert(const Array& params, bool fHelp)
 // RPCs send..
 Value sendtoalias(const Array& params, bool fHelp)
 {
-    if (fHelp || params.size() < 2 || params.size() > 2)
+    if (fHelp || params.size() < 2 || params.size() > 4)
         throw runtime_error(
-            "sendtoalias <alias> <amount>\n"
+            "sendtoalias <alias> '[method,values,...]' <amount> [minconf=6]\n"
 	    "a cert for alias is looked up in .bitcoin/testnet3/bcerts, parsed, and verified."
+	    "method is an integer: 4 for static, 1 for pecsingle; further values depend on method."
 	    "if successful then funds are sent to the static bitcoin address contained in that certificate."
             "<amount> is a real and is rounded to the nearest 0.00000001"
             + HelpRequiringPassphrase());
 
+    // Minimum confirmations
+    int nMinDepth = 6;
+    if (params.size() > 3)
+        nMinDepth = params[3].get_int();
+
     rpc_testnetonly();
     CAlias alias = rpc_buildalias(params[0].get_str());
-    int64 nAmount = AmountFromValue(params[1]);
+    int64 nAmount = AmountFromValue(params[2]);
 
     CBitcoinCert cert;
     int nConfirmations = rpc_verify(alias,cert);
     if (nConfirmations < 0)
       throw runtime_error("sendtoalias: cert did not verify.");
 
+    if (nConfirmations < nMinDepth)
+      throw runtime_error(strprintf("sendtoalias: cert has only %d confirmations.",nConfirmations));
+
     if (pwalletMain->IsLocked())
         throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED, "Error: Please enter the wallet passphrase with walletpassphrase first.");
-    
-    CBitcoinAddress address;
-    if (!cert.GetStatic(address))
-      throw runtime_error("sendtoalias: cert does not contain static address.");
 
-    // Wallet comments
+    // Method
+    Array method = params[1].get_array();
+    if (method.size() == 0)
+      throw runtime_error("sendtoalias: no method given, take first method from cert, not yet implemented.");
+
+    //    if (!RPCTypeCheck(method, list_of(int_type)))
+    // throw runtime_error("sendtoalias: method must be int_type.");
+
+    unsigned int methodtype = method[0].get_int();
+    CBitcoinAddress address;
     CWalletTx wtx;
-    wtx.mapValue["to"]      = alias.GetNormalized() + "<static> = " + address.ToString();
+    switch (methodtype) {
+    case 4: // STATIC_BTCADDR
+      if (!cert.GetStatic(address))
+	throw runtime_error("sendtoalias: cert does not contain static address.");
+      wtx.mapValue["to"]      = alias.GetNormalized() + "<static> = " + address.ToString();
+      break;
+    case 1: // P2CSINGLE
+      CPubKey base;
+      if (!cert.GetP2CSingle(base))
+	throw runtime_error("sendtoalias: cert does not contain P2CSINGLE address.");
+      if (method.size() < 2)
+	throw runtime_error("sendtoalias: method type P2CSINGLE requires ticket.");
+      vector<unsigned char> vch = ParseHex(method[1].get_str());
+      wtx.mapValue["comment"] = "P2C base: " + HexStr(base.Raw());
+      wtx.mapValue["comment"] += "P2C ticket: " + HexStr(vch);
+      wtx.mapValue["to"]      = alias.GetNormalized() + "_P2CSINGLE<" + HexStr(vch) + "> = " + address.ToString();
+      vch.resize(32);
+      CKey baseKey;
+      baseKey.SetPubKey(base);
+      address = CBitcoinAddress(baseKey.GetDerivedKey(uint256(vch)).GetPubKey().GetID());
+    }
 
     // Sending
     string strError = pwalletMain->SendMoneyToDestination(address.Get(), nAmount, wtx);
@@ -654,7 +688,7 @@ Value sendtoalias(const Array& params, bool fHelp)
 
     // compile output
     Object result;
-    result.push_back(Pair("nConfirmations",nConfirmations));
+    if (JSONverbose > 0) result.push_back(Pair("nConfirmations",nConfirmations));
     result.push_back(Pair("static",address.ToString()));
     result.push_back(Pair("txid", wtx.GetHash().GetHex()));
 
@@ -706,7 +740,7 @@ Value spendoutpoint(const Array& params, bool fHelp)
     int64 nFeeRequired = 0;
     vector<COutPoint> vecSpend;
     vecSpend.push_back(COutPoint(uint256(params[0].get_str()),params[1].get_int()));
-    {
+    if (JSONverbose > 0) {
       Array entries;
       BOOST_FOREACH(COutPoint outp, vecSpend) 
 	entries.push_back(OutPointToJSON(outp));
@@ -714,7 +748,7 @@ Value spendoutpoint(const Array& params, bool fHelp)
     }
     bool fCreated = pwalletMain->CreateTransaction(vecSend, wtx, keyChange, nFeeRequired, vecSpend);
     if (!fCreated)
-        throw JSONRPCError(RPC_WALLET_ERROR, "Transaction creation failed");
+      throw JSONRPCError(RPC_WALLET_ERROR, "Transaction creation failed");
     result.push_back(Pair("nFee", ValueFromAmount(nFeeRequired)));
     if (JSONverbose > 0) result.push_back(Pair("changeKey", PubKeyToJSON(keyChange.GetReservedKey())));
 
@@ -722,8 +756,7 @@ Value spendoutpoint(const Array& params, bool fHelp)
     if (!pwalletMain->CommitTransaction(wtx, keyChange))
         throw JSONRPCError(RPC_WALLET_ERROR, "Transaction commit failed");
     result.push_back(Pair("txid", wtx.GetHash().GetHex()));
-    result.push_back(Pair("wtx", rpc_TxToJSON(wtx)));
-
+    if (JSONverbose > 0) result.push_back(Pair("wtx", rpc_TxToJSON(wtx)));
 
     return result;
 }

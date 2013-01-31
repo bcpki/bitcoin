@@ -168,6 +168,20 @@ bool CBitcoinCert::GetStatic(CBitcoinAddress& addr) const {
   return fFound;
 }
 
+bool CBitcoinCert::GetP2CSingle(CPubKey& pubkey) const {
+  bool fFound = false;
+  for (int i = 0; i < cert.data().paymentkeys_size(); i++) {
+    bcert::BitcoinCertData_PublicKey key = cert.data().paymentkeys(i);
+    if (key.algorithm().type() == bcert::BitcoinCertData_PublicKey_Algorithm_Type_P2CSINGLE) {
+      string str = key.value(0);
+      vector<unsigned char> vch(str.begin(),str.end());
+      pubkey = CPubKey(vch); 
+      fFound = true;
+    }
+  }
+  return fFound;
+}
+
 uint160 CBitcoinCert::GetHash160() const {
   string ser;
   bcert::BitcoinCertData data = cert.data();
