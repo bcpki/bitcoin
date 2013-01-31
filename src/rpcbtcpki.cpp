@@ -8,6 +8,7 @@
 #include "alias.h" 
 #include "bcert.h"  
 #include "init.h"
+#include "rpctojson.h"
 //in deprecated functions #include <openssl/sha.h>
 
 using namespace json_spirit;
@@ -24,71 +25,6 @@ using namespace boost::assign; // list_of
 
 
 // utils
-void rpc_ScriptPubKeyToJSON(const CScript& scriptPubKey, Object& out)
-{
-    txnouttype type;
-    vector<CTxDestination> addresses;
-    int nRequired;
-
-    out.push_back(Pair("asm", scriptPubKey.ToString()));
-    out.push_back(Pair("hex", HexStr(scriptPubKey.begin(), scriptPubKey.end())));
-
-    if (!ExtractDestinations(scriptPubKey, type, addresses, nRequired))
-    {
-        out.push_back(Pair("type", GetTxnOutputType(TX_NONSTANDARD)));
-        return;
-    }
-
-    out.push_back(Pair("reqSigs", nRequired));
-    out.push_back(Pair("type", GetTxnOutputType(type)));
-
-    Array a;
-    BOOST_FOREACH(const CTxDestination& addr, addresses)
-        a.push_back(CBitcoinAddress(addr).ToString());
-    out.push_back(Pair("addresses", a));
-}
-
-Value rpc_TxToJSON(const CTransaction& tx)
-{
-  Object entry;
-    entry.push_back(Pair("txid", tx.GetHash().GetHex()));
-    entry.push_back(Pair("version", tx.nVersion));
-    entry.push_back(Pair("locktime", (boost::int64_t)tx.nLockTime));
-    Array vin;
-    BOOST_FOREACH(const CTxIn& txin, tx.vin)
-    {
-        Object in;
-        if (tx.IsCoinBase())
-            in.push_back(Pair("coinbase", HexStr(txin.scriptSig.begin(), txin.scriptSig.end())));
-        else
-        {
-            in.push_back(Pair("txid", txin.prevout.hash.GetHex()));
-            in.push_back(Pair("vout", (boost::int64_t)txin.prevout.n));
-            Object o;
-            o.push_back(Pair("asm", txin.scriptSig.ToString()));
-            o.push_back(Pair("hex", HexStr(txin.scriptSig.begin(), txin.scriptSig.end())));
-            in.push_back(Pair("scriptSig", o));
-        }
-        in.push_back(Pair("sequence", (boost::int64_t)txin.nSequence));
-        vin.push_back(in);
-    }
-    entry.push_back(Pair("vin", vin));
-    Array vout;
-    for (unsigned int i = 0; i < tx.vout.size(); i++)
-    {
-        const CTxOut& txout = tx.vout[i];
-        Object out;
-        out.push_back(Pair("value", ValueFromAmount(txout.nValue)));
-        out.push_back(Pair("n", (boost::int64_t)i));
-        Object o;
-        rpc_ScriptPubKeyToJSON(txout.scriptPubKey, o);
-        out.push_back(Pair("scriptPubKey", o));
-        vout.push_back(out);
-    }
-    entry.push_back(Pair("vout", vout));
-    return entry;
-}
-
 CPubKey rpc_aliasnew(const CAlias alias, pubkey_type type) {
   CPubKey newKey;
   if (!pwalletMain->GetKeyFromPool(newKey, false))
@@ -217,16 +153,18 @@ Value rpc_bcsign(const vector<CBcValue> values, const unsigned int nReq, const u
 
   // Wallet comments
   {
-    wtx.mapValue["bcsign"] = string("v") + BCPKI_VERSION;
+    wtx.mapValue["bcsignv"] = BCPKI_SIGVERSION;
     // values are needed later to spend the outputs for revocation (they need to be imported as privkeys) 
     wtx.mapValue["bcvalues"] = "";
     BOOST_FOREACH(CBcValue val, values) {
-      wtx.mapValue["bcvalues"] += val.GetLEHex() + " ";
-      wtx.mapValue["privkeys"] += val.GetPrivKeyB58() + " ";
+      wtx.mapValue["bcvalues"] += "("+val.GetPrivKeyB58()+":"+val.GetLEHex()+")";
     }
     wtx.mapValue["owners"] = "";
-    BOOST_FOREACH(CPubKey owner, owners)
-      wtx.mapValue["owners"] += HexStr(owner.Raw()) + " ";
+    BOOST_FOREACH(CPubKey owner, owners) {
+      CBitcoinAddress addr;
+      addr.Set(owner.GetID());
+      wtx.mapValue["owners"] += "("+HexStr(owner.Raw())+":"+addr.ToString()+")";
+    }
   }
 
   // create and commit transaction
@@ -413,6 +351,7 @@ Value bclist(const Array& params, bool fHelp)
 
     // build alias
     CAlias alias = rpc_buildalias(params[0].get_str());
+    return result;
       
     // lookup
     uint256 txid;

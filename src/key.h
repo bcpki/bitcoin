@@ -159,8 +159,8 @@ public:
     bool IsValid();
 
     // BCPKI
-    bool SetSecretByNumber(uint256 num, bool fCompressed = true); 
-    CKey GetDerivedKey(const uint256& ticket, bool fCompressed = true) const;
+    bool SetSecretByNumber(uint256 num); 
+    CKey GetDerivedKey(const uint256& ticket) const;
 };
 
 #endif

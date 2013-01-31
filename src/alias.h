@@ -11,14 +11,13 @@
 
 #include <boost/assign/list_of.hpp>
 
-#define BCPKI_ALIAS "alias"
-#define BCPKI_VERSION "0.3"
-#define BCPKI_SIGPREFIX "BCSIG_v0.3_"
+#define BCPKI_SIGVERSION "0.4"
+#define BCPKI_SIGPREFIX "BCSIG_v0.4_"
 #define BCPKI_TESTNETONLY true
 #define BCPKI_MINAMOUNT 100*50000
 
 // debug flag, true produces more output than necessary in JSON return objects
-const unsigned int JSONverbose = 1;
+const unsigned int JSONverbose = 0;
 
 enum pubkey_type { ADDR, OWNER, BASE, DERIVED };
 
@@ -28,27 +27,27 @@ class CRegistration;
 class CBcValue
 {
 protected:
-  uint256 value;
-  uint160 hash;
+  std::vector<unsigned char> vch;
   CKey key;
   CKeyID keyID;
   bool fSet;
 
-  void init_uint256(const uint256 val);
-  bool init_vch(std::vector<unsigned char> vch);
-  // should be const, but begin(),end() are not const
-  bool init_uint160(uint160 val);
+  bool init();
+  bool setValue(uint160 n);
   void _toJSON(json_spirit::Object& result); // should be const
 
 public:
   explicit CBcValue() { };
-  explicit CBcValue(const uint256 val) { init_uint256(val); };
+  // explicit CBcValue(const uint256 val) { init_uint256(val); };
   // should be const, but begin(),end() are not const
-  explicit CBcValue(uint160 val) { init_uint160(val); };
+  // explicit CBcValue(const uint160 val) { value = val; init(); };
+  explicit CBcValue(const std::vector<unsigned char> val) { vch = val; init(); };
+  explicit CBcValue(const uint160 n) { setValue(n); }
   explicit CBcValue(const std::string& str); // requires hex string up to 64 characters (32 bytes), interpreted as little-endian number
 
   bool IsSet() const { return fSet; };
-  uint256 GetValue() const { return value; };
+  uint160 Get160() const { std::vector<unsigned char> cp(vch); cp.resize(20); return uint160(cp); };
+  uint256 Get256() const { std::vector<unsigned char> cp(vch); cp.resize(32); return uint256(cp); };
   CKey GetKey() const { return key; };
   CPubKey GetPubKey() const { return key.GetPubKey(); };
   CKeyID GetPubKeyID() const { return keyID; };
@@ -59,10 +58,8 @@ public:
   bool IsValidInCoins(const CCoins coins) const;
   CScript MakeScript(const std::vector<CPubKey> owners, const unsigned int nReq = 0) const;
   // should be const, but begin(),end() are not const
-  //  std::string GetPubKeyIDHex() { const std::vector<unsigned char> vch(keyID.begin(),keyID.end()); return HexStr(vch); };
   std::string GetPubKeyIDHex() { return HexStr(keyID.begin(),keyID.end()); };
-  //std::string GetLEHex() { const std::vector<unsigned char> vch(value.begin(),value.end()); return HexStr(vch); }; // little-endian hex string
-  std::string GetLEHex() { return HexStr(value.begin(),value.end()); }; // little-endian hex string
+  std::string GetLEHex() { return HexStr(vch); }; // little-endian hex string
   std::string addressbookname() { return GetLEHex() + "_VALUE"; }; 
   json_spirit::Object ToJSON();
 
