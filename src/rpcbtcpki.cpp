@@ -660,10 +660,10 @@ Value sendtoalias(const Array& params, bool fHelp)
     CBitcoinAddress address;
     CWalletTx wtx;
     switch (methodtype) {
-    case 4: // STATIC_BTCADDR
+    case 4: // STATICADDR
       if (!cert.GetStatic(address))
 	throw runtime_error("sendtoalias: cert does not contain static address.");
-      wtx.mapValue["to"]      = alias.GetNormalized() + "<static> = " + address.ToString();
+      wtx.mapValue["to"]      = alias.GetNormalized() + "<STATICADDR> = " + address.ToString();
       break;
     case 1: // P2CSINGLE
       CPubKey base;
@@ -672,46 +672,29 @@ Value sendtoalias(const Array& params, bool fHelp)
       if (method.size() < 2)
 	throw runtime_error("sendtoalias: method type P2CSINGLE requires ticket.");
       vector<unsigned char> vch = ParseHex(method[1].get_str());
-      wtx.mapValue["comment"] = "P2C base: " + HexStr(base.Raw());
-      wtx.mapValue["comment"] += "P2C ticket: " + HexStr(vch);
-      wtx.mapValue["to"]      = alias.GetNormalized() + "_P2CSINGLE<" + HexStr(vch) + "> = " + address.ToString();
+      wtx.mapValue["p2csingle"] = HexStr(base.Raw());
+      wtx.mapValue["ticket"] += HexStr(vch);
+      wtx.mapValue["to"] = alias.GetNormalized() + "<P2CSINGLE:" + HexStr(vch) + "> = ";
       vch.resize(32);
       CKey baseKey;
       baseKey.SetPubKey(base);
       address = CBitcoinAddress(baseKey.GetDerivedKey(uint256(vch)).GetPubKey().GetID());
+      wtx.mapValue["to"] += address.ToString();
     }
 
     // Sending
     string strError = pwalletMain->SendMoneyToDestination(address.Get(), nAmount, wtx);
     if (strError != "")
-        throw JSONRPCError(RPC_WALLET_ERROR, strError);
+      throw JSONRPCError(RPC_WALLET_ERROR, strError);
 
     // compile output
     Object result;
     if (JSONverbose > 0) result.push_back(Pair("nConfirmations",nConfirmations));
-    result.push_back(Pair("static",address.ToString()));
+    result.push_back(Pair("dest",address.ToString()));
     result.push_back(Pair("txid", wtx.GetHash().GetHex()));
 
     return result;
 }
-
-/* deprecated: this was sendtoaliasowner
-
-
-    // Ticket
-    if (params.size() > 2 && params[2].type() != null_type && !params[2].get_str().empty())
-      {
-	string hexticket = params[2].get_str();
-	uint256 ticket;
-	ticket.SetHex(hexticket);
-	wtx.mapValue["comment"] = "Pay2Contract ticket: " + hexticket;
-        address = reg.GetEntry(0).GetDerivedOwnerAddr(ticket);
-      }
-    else
-      address = reg.GetEntry(0).GetOwnerAddr();
-      
-}
-*/
 
 Value spendoutpoint(const Array& params, bool fHelp)
 {

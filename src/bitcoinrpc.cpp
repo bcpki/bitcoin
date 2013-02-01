@@ -1233,6 +1233,7 @@ Array RPCConvertValues(const std::string &strMethod, const std::vector<std::stri
     if (strMethod == "importprivkey"          && n > 2) ConvertTo<bool>(params[2]);
 //BCPKI
     if (strMethod == "getnewaddress"          && n > 1) ConvertTo<bool>(params[1]);
+    if (strMethod == "dumpprivkey"            && n > 1) ConvertTo<bool>(params[1]);
     if (strMethod == "aliasnew"               && n > 2) ConvertTo<int>(params[2]);
     if (strMethod == "bcsign"                 && n > 0) ConvertTo<Object>(params[0]);
     if (strMethod == "bcsign"                 && n > 1) ConvertTo<Array>(params[1]);

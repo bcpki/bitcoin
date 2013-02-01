@@ -17,7 +17,7 @@
 #define BCPKI_MINAMOUNT 100*50000
 
 // debug flag, true produces more output than necessary in JSON return objects
-const unsigned int JSONverbose = 0;
+const unsigned int JSONverbose = 1;
 
 enum pubkey_type { ADDR, OWNER, BASE, DERIVED };
 
