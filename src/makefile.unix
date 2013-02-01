@@ -102,6 +102,9 @@ xCXXFLAGS=-O2 -pthread -Wall -Wextra -Wformat -Wformat-security -Wno-unused-para
 xLDFLAGS=$(LDHARDENING) $(LDFLAGS)
 
 OBJS= \
+    obj/rpctojson.o \
+    obj/rpcbtcpki.o \
+    obj/bcert.pb.o \
     obj/alias.o \
     obj/bcert.o \
     obj/alert.o \
