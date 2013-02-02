@@ -76,6 +76,7 @@ class CAlias: public CBcValue
 
  public:
   // requires a valid alias string (limited charset), applies normalization and Hash160
+  explicit CAlias() { };
   explicit CAlias(const std::string& name); 
 
   std::string GetName() const { return name; };

@@ -122,16 +122,20 @@ Value rpc_bcsign(const vector<CBcValue> values, const unsigned int nReq, const u
 
   // collect internal owners
   {
-    Array ownerArray; // just for return object
     while (owners.size() < nOwners) {
       // get new owner pubkey from keypool
       CPubKey newKey;
       if (!pwalletMain->GetKeyFromPool(newKey, false))
 	throw JSONRPCError(RPC_WALLET_KEYPOOL_RAN_OUT, "Error: Keypool ran out, please call keypoolrefill first");
       owners.push_back(newKey);
-      ownerArray.push_back(PubKeyToJSON(newKey));
     }
-    if (JSONverbose > 0) result.push_back(Pair("owners", ownerArray));
+  }
+
+  if (JSONverbose > 0) {
+    Array ownerArray; // just for return object
+    BOOST_FOREACH(CPubKey owner, owners)
+      ownerArray.push_back(PubKeyToJSON(owner));
+    result.push_back(Pair("owners", ownerArray));
   }
   
   // make output scrips
@@ -182,6 +186,79 @@ Value rpc_bcsign(const vector<CBcValue> values, const unsigned int nReq, const u
   }
 
   return result;
+}
+
+bool rpc_parsealiasobject(const string argStr, CAlias& alias, unsigned int& nReq, unsigned int& nOwners, vector<CPubKey>& owners, Object& result)
+{
+  if (argStr.size() == 0 || argStr[0] != '{')
+    return false;
+
+  Object obj;
+  {
+    Value val;
+    if (!read_string(argStr, val))
+      throw runtime_error(string("Error parsing JSON:")+argStr);
+    obj = val.get_obj();
+  }
+  
+  // alias
+  {
+    if (find_value(obj, "alias").type() == null_type)
+      throw JSONRPCError(-8, "alias missing");
+    string aliasStr = find_value(obj, "alias").get_str();
+    if (JSONverbose > 0) result.push_back(Pair("aliasStr", aliasStr));
+    alias = CAlias(aliasStr);
+  }
+  
+  // count owners
+  if (find_value(obj, "owners").type() != null_type) {
+    nOwners = find_value(obj, "owners").get_array().size();
+    if (nOwners > 2)
+      throw JSONRPCError(-8, "only up to 2 owners allowed");
+  }
+      
+  // nRequired
+  if (find_value(obj, "n").type() == null_type) {
+    if (nOwners == 0)
+      nReq = nOwners = 1; // require one pubkey from keypool
+    else
+      nReq = nOwners; // require all listed pubkeys
+  }
+  else {
+    nReq = find_value(obj, "n").get_int();
+    if (nReq < 1 || nReq > 2)
+      throw JSONRPCError(-8, "n must be 1 or 2");
+    if (nOwners == 0)
+      nOwners = nReq; // take nReq pubkeys from keypool
+    else
+      if (nOwners < nReq)
+	throw JSONRPCError(-8, "n must be <= number of owners");
+  }
+  
+  if (JSONverbose > 0) {
+    result.push_back(Pair("nOwners", (int)nOwners));
+    result.push_back(Pair("nReq", (int)nReq));
+  }
+
+  // collect external owners
+  {
+    Array ownerArray; // just for return object
+    if (find_value(obj, "owners").type() != null_type) {
+      BOOST_FOREACH(Value ownerVal, find_value(obj, "owners").get_array()) {
+	if (ownerVal.type() != str_type) 
+	  throw JSONRPCError(-8, "owner is not str type");
+	string ownerStr = ownerVal.get_str();
+	if (ownerStr.size() > 0) {   // ownerStr == "" means to add an internal owner later 
+	  CPubKey ownerPubKey(ParseHex(ownerStr));
+	  // TODO check if this is a valid pubkey, length of ownerStr, point on curve, etc
+	  owners.push_back(ownerPubKey);
+	  ownerArray.push_back(PubKeyToJSON(ownerPubKey));
+	}
+      }
+    }
+    result.push_back(Pair("externalowners",ownerArray));
+  }
+  return true;
 }
 
 // RPCs alias...
@@ -391,166 +468,52 @@ Value bcsign(const Array& params, bool fHelp)
 
   rpc_testnetonly();
     
-    // collect output in here
-    Object result;
-
-    // parse first argument
-    unsigned int nOwners = 0; // total number of owners expected
-    unsigned int nReq;
-    vector<CPubKey> owners;
-    Array ownerArray; // just for return object
-    string aliasStr;
-    // there are two variants for first argument: long and short
-    if (1) {
-      // long variant
-      RPCTypeCheck(params, list_of(obj_type)(array_type),true);
-      const Object& aliasObj = params[0].get_obj();
-      RPCTypeCheck(aliasObj, map_list_of("alias", str_type)("n", int_type)("owners", array_type),true);
-  
-      // alias
-      if (find_value(aliasObj, "alias").type() == null_type)
-        throw JSONRPCError(-8, "alias missing");
-      aliasStr = find_value(aliasObj, "alias").get_str();
-      if (JSONverbose > 0) result.push_back(Pair("aliasStr", aliasStr));
-  
-      // count owners
-      if (find_value(aliasObj, "owners").type() != null_type) {
-        nOwners = find_value(aliasObj, "owners").get_array().size();
-        if (nOwners > 2)
-  	throw JSONRPCError(-8, "only up to 2 owners allowed");
-      }
+  // parse first argument
+  CAlias alias;
+  vector<CPubKey> owners; // empty
+  unsigned int nOwners = 1;
+  unsigned int nReq = 1;
+  Object result;
+  if (!rpc_parsealiasobject(params[0].get_str(), alias, nReq, nOwners, owners, result))
+    CAlias alias = rpc_buildalias(params[0].get_str());
+  if (JSONverbose > 0) result.push_back(Pair("aliasArg", alias.ToJSON()));
       
-      // nRequired
-      if (find_value(aliasObj, "n").type() == null_type) {
-        if (nOwners == 0)
-  	nReq = nOwners = 1; // require one pubkey from keypool
-        else
-  	nReq = nOwners; // require all listed pubkeys
-      }
-      else {
-        nReq = find_value(aliasObj, "n").get_int();
-        if (nReq < 1 || nReq > 2)
-  	throw JSONRPCError(-8, "n must be 1 or 2");
-        if (nOwners == 0)
-  	nOwners = nReq; // take nReq pubkeys from keypool
-        else
-  	if (nOwners < nReq)
-  	  throw JSONRPCError(-8, "n must be <= number of owners");
-      }
-  
-      if (JSONverbose > 0) {
-	result.push_back(Pair("nOwners", (int)nOwners));
-	result.push_back(Pair("nReq", (int)nReq));
-      }
-      // collect owners
-      // external owners first
-      if (find_value(aliasObj, "owners").type() != null_type) {
-        BOOST_FOREACH(Value ownerVal, find_value(aliasObj, "owners").get_array()) {
-  	if (ownerVal.type() != str_type) 
-  	  throw JSONRPCError(-8, "owner is not str type");
-  	string ownerStr = ownerVal.get_str();
-  	if (ownerStr.size() > 0) {   // ownerStr == "" means to add an internal owner later 
-  	  CPubKey ownerPubKey(ParseHex(ownerStr));
-	  // TODO check if this is a valid pubkey, length of ownerStr, point on curve, etc
-  	  owners.push_back(ownerPubKey);
-  	  ownerArray.push_back(PubKeyToJSON(ownerPubKey));
-  	}
-        }
-      }
-    } // end long variant of first argument
-    else {
-      // short variant
-      RPCTypeCheck(params, list_of(str_type)(array_type),true);
-      aliasStr = params[0].get_str();
-      nOwners = 1; // just one owner from the keypool
-    }
-    
-    // build alias
-    CAlias alias = rpc_buildalias(aliasStr);
-    if (JSONverbose > 0) result.push_back(Pair("aliasArg", alias.ToJSON()));
-      
-    // test lookup
-    uint256 txid;
-    if (!(JSONverbose > 0) && alias.Lookup(txid))
-      throw runtime_error("RPC bcsign: valid signature already present in blockchain. not signing again.");
+  // test lookup
+  uint256 txid;
+  if (!(JSONverbose > 0) && alias.Lookup(txid))
+    throw runtime_error("RPC bcsign: valid signature already present in blockchain. not signing again.");
 
-    // collect values including alias
-    vector<CBcValue> values (1,alias);
-    // parse second argument
-    bool fCertVal = (params.size() == 1);
-    if (params.size() > 1) {
-      Array valueArray = params[1].get_array();
-      BOOST_FOREACH(const Value& val, valueArray)
+  // collect values including alias
+  vector<CBcValue> values (1,alias);
+  // parse second argument
+  if (params.size() > 1) {
+    Array valueArray = params[1].get_array();
+    BOOST_FOREACH(const Value& val, valueArray)
       {
         string valStr = val.get_str();
-	if (valStr.size() == 0)
-	  fCertVal = true;
-	else
-	    values.push_back(CBcValue(valStr));
+	if (valStr.size() != 0) values.push_back(CBcValue(valStr));
       }
-    }
+  }
 
-    // TODO this should be removed from here into bcsigncert, right?
-    // add cert value
-    if (fCertVal) {
-      CBitcoinCert cert(alias);
-      if (JSONverbose > 0) result.push_back(Pair("cert", cert.ToJSON()));
-      /*
-      string signee;
-      cert.GetSignee(signee);
-      result.push_back(Pair("signee", signee));
-      CAlias signeealias(signee);
-      result.push_back(Pair("signeeIDHex", signeealias.GetPubKeyIDHex()));
-      result.push_back(Pair("aliasIDHex", alias.GetPubKeyIDHex()));
-      */
-      if (!(cert.IsSet()))
-	//throw JSONRPCError(-8, "warning: certificate signature does not seem to match alias");
-	return result;
-      values.push_back(CBcValue(cert.GetHash160()));
-    }
+  // sign
+  CWalletTx wtx;
+  Value bcsignresult = rpc_bcsign(values,nReq,nOwners,owners,wtx);
+  if (JSONverbose > 0) result.push_back(Pair("bssignresult", bcsignresult));
 
-    // collect internal owners
-    while (owners.size() < nOwners) {
-      // get new owner pubkey from keypool
-      CPubKey owner = rpc_aliasnew(alias,OWNER);
-      owners.push_back(owner);
-      ownerArray.push_back(PubKeyToJSON(owner));
-    }
-    if (JSONverbose > 0) result.push_back(Pair("owners", ownerArray));
-
-    // build output scripts
-    vector<pair<CScript,int64> > vecSend;
-    Array outs;
-    BOOST_FOREACH(CBcValue val, values)
-      {
-	pair<CScript,int64> out (val.MakeScript(owners,nReq),BCPKI_MINAMOUNT); // require nReq of the owner keys (currently 1 or 2) 
-	vecSend.push_back(out);
-	Object entry;
-	entry.push_back(Pair("value",val.ToJSON()));
-	entry.push_back(Pair("script",ScriptToJSON(out.first)));
-	entry.push_back(Pair("nAmount",BCPKI_MINAMOUNT));
-	outs.push_back(entry);
-      }
-    if (JSONverbose > 0) result.push_back(Pair("outs", outs));
-
-    // Wallet comments
-    CWalletTx wtx;
-    Value bcsigned = rpc_bcsign(values,nReq,owners.size(),owners,wtx);
-    result.push_back(Pair("bcsigned", bcsigned));
-
-    wtx.mapValue["signature"] = alias.GetName();
-    // after successful commit we save the alias pubkey id in an account
-    // we deliberately do not add the alias' priv key to our wallet, so the blockchain signature can not be accidentally revoked
-    // note that pwalletMain->LockCoin(outpt) would not lock the output permanently, not across restarts
-    // to revoke the user has to first import the privkey by hand (from the wtx comment field) and then use the spendoutput-RPC
-    pwalletMain->SetAddressBookName(alias.GetPubKeyID(), alias.addressbookname(ADDR));
+  // additional wallet comments
+  wtx.mapValue["signature"] = alias.GetName();
+  // after successful commit we save the alias pubkey id in an account
+  // we deliberately do not add the alias' priv key to our wallet, so the blockchain signature can not be accidentally revoked
+  // note that pwalletMain->LockCoin(outpt) would not lock the output permanently, not across restarts
+  // to revoke the user has to first import the privkey by hand (from the wtx comment field) and then use the spendoutput-RPC
+  pwalletMain->SetAddressBookName(alias.GetPubKeyID(), alias.addressbookname(ADDR));
     
-    // after successful commit we save the value pubkeys ids in their own accounts
-    BOOST_FOREACH(CBcValue val, values) {
-      pwalletMain->SetAddressBookName(val.GetPubKeyID(), val.addressbookname());
-    }
+  // after successful commit we save the value pubkeys ids in their own accounts
+  BOOST_FOREACH(CBcValue val, values) {
+    pwalletMain->SetAddressBookName(val.GetPubKeyID(), val.addressbookname());
+  }
     
-    return result;
+  return result;
 } // bcsign
 
 Value bcsigncert(const Array& params, bool fHelp)
@@ -558,13 +521,24 @@ Value bcsigncert(const Array& params, bool fHelp)
   if (fHelp || params.size() < 1 || params.size() > 2)
     {
       string msg = "bcsigncert <alias> <hex cert>\n"
-	"The first argument is a valid alias name (limited charset, etc)."
+	"bcsigncert '{\"alias\":\"aliasname\",\"n\":nRequired,\"owners\":[\"<pubkey>\",\"<pubkey>\",...]}' <hex cert>\n"
+	"The first argument is either a valid alias name (limited charset, etc) or a quoted JSON object as described."
 	"The second argument is a hex serialized protobuf message containing the certificate.\n";
+//'[{\"<hexvalue>\",\"<hexvalue>\",...}]'\n"
       
       throw runtime_error(msg);
     }
-  // build alias
-  CAlias alias = rpc_buildalias(params[0].get_str());
+
+  // parse first argument
+  CAlias alias;
+  vector<CPubKey> owners; // empty
+  unsigned int nOwners = 1;
+  unsigned int nReq = 1;
+  Object result;
+  if (!rpc_parsealiasobject(params[0].get_str(), alias, nReq, nOwners, owners, result))
+    CAlias alias = rpc_buildalias(params[0].get_str());
+  if (JSONverbose > 0) result.push_back(Pair("aliasArg", alias.ToJSON()));
+  return result;
 
   // test lookup
   uint256 txid;
@@ -572,6 +546,7 @@ Value bcsigncert(const Array& params, bool fHelp)
     throw runtime_error("RPC bcsigncert: valid signature already present in blockchain. not signing again.");
 
   // backward compatibility (one arg version)
+  /* deprecated
   if (params.size() == 1) {
     Array arr;
     Object obj;
@@ -579,6 +554,7 @@ Value bcsigncert(const Array& params, bool fHelp)
     arr.push_back(obj);
     return bcsign(arr,fHelp);
   }
+  */
 
   // build cert value
   if (!IsHex(params[1].get_str()))
@@ -590,12 +566,12 @@ Value bcsigncert(const Array& params, bool fHelp)
   vector<CBcValue> values;
   values.push_back(alias);
   values.push_back(certval); 
-  vector<CPubKey> owners; // empty
 
   // sign
   CWalletTx wtx;
-  Value result = rpc_bcsign(values,1,1,owners,wtx);
-  result.get_obj().push_back(Pair("fname",alias.GetPubKeyIDHex()));
+  Value bcsignresult = rpc_bcsign(values,nReq,nOwners,owners,wtx);
+  bcsignresult.get_obj().push_back(Pair("fname",alias.GetPubKeyIDHex()));
+  if (JSONverbose > 0) result.push_back(Pair("bssignresult", bcsignresult));
 
   // additional wallet comments
   wtx.mapValue["signature"] = alias.GetName();
