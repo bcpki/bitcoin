@@ -408,6 +408,7 @@ Object PubKeyToJSON(const CPubKey& key) {
 
 Object KeyToJSON(const CKey& key) {
   Object result;
+  result.push_back(Pair("isCompressed", key.IsCompressed()));
   result.push_back(Pair("pubkey", HexStr(key.GetPubKey().Raw())));
   CKeyID keyID = key.GetPubKey().GetID();
   result.push_back(Pair("id", HexStr(keyID.begin(),keyID.end())));
@@ -416,8 +417,8 @@ Object KeyToJSON(const CKey& key) {
     {
       bool fCompr;
       const CSecret& sec = key.GetSecret(fCompr);
-      result.push_back(Pair("value", HexStr(sec.begin(),sec.end())));
-      result.push_back(Pair("privkey", CBitcoinSecret(sec,fCompr).ToString()));
+      result.push_back(Pair("secret", HexStr(sec.begin(),sec.end())));
+      result.push_back(Pair("privkey", CBitcoinSecret(sec,false).ToString()));
     }
   return result;
 };

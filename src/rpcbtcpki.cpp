@@ -475,7 +475,7 @@ Value bcsign(const Array& params, bool fHelp)
   unsigned int nReq = 1;
   Object result;
   if (!rpc_parsealiasobject(params[0].get_str(), alias, nReq, nOwners, owners, result))
-    CAlias alias = rpc_buildalias(params[0].get_str());
+    alias = rpc_buildalias(params[0].get_str());
   if (JSONverbose > 0) result.push_back(Pair("aliasArg", alias.ToJSON()));
       
   // test lookup
@@ -536,9 +536,8 @@ Value bcsigncert(const Array& params, bool fHelp)
   unsigned int nReq = 1;
   Object result;
   if (!rpc_parsealiasobject(params[0].get_str(), alias, nReq, nOwners, owners, result))
-    CAlias alias = rpc_buildalias(params[0].get_str());
+      alias = rpc_buildalias(params[0].get_str());
   if (JSONverbose > 0) result.push_back(Pair("aliasArg", alias.ToJSON()));
-  return result;
 
   // test lookup
   uint256 txid;
