@@ -9,11 +9,11 @@ import e
 
 alias=sys.argv[1]
 ## normalization here
-normalized = 'F01'
+normalized = 'F0PR0JECT'
 prefixed = 'BCSIG_v0.4_'+normalized
 print hash_160(prefixed).encode('hex')
 id = e.point2idx(e.derivepoint(e.zero,hash_160(prefixed)))
-fname = '/users/hanke/.bitcoin/testnet3/bcerts/'+id+'.bcrt'
+fname = '/home/timo/.bitcoin/testnet3/bcerts/'+id+'.bcrt'
 
 print "reading: "+fname
 

@@ -505,7 +505,7 @@ Value bcsign(const Array& params, bool fHelp)
   // after successful commit we save the alias pubkey id in an account
   // we deliberately do not add the alias' priv key to our wallet, so the blockchain signature can not be accidentally revoked
   // note that pwalletMain->LockCoin(outpt) would not lock the output permanently, not across restarts
-  // to revoke the user has to first import the privkey by hand (from the wtx comment field) and then use the spendoutput-RPC
+  // to revoke the user has to first import the privkey by hand (from the wtx comment field) and then use the spendoutpoint-RPC
   pwalletMain->SetAddressBookName(alias.GetPubKeyID(), alias.addressbookname(ADDR));
     
   // after successful commit we save the value pubkeys ids in their own accounts
@@ -709,6 +709,7 @@ Value spendoutpoint(const Array& params, bool fHelp)
       throw JSONRPCError(RPC_WALLET_ERROR, "Transaction creation failed");
     result.push_back(Pair("nFee", ValueFromAmount(nFeeRequired)));
     if (JSONverbose > 0) result.push_back(Pair("changeKey", PubKeyToJSON(keyChange.GetReservedKey())));
+    return result;
 
     // commit
     if (!pwalletMain->CommitTransaction(wtx, keyChange))
