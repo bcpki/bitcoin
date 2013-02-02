@@ -9,7 +9,7 @@
 #include "sync.h"
 #include "net.h"
 #include "script.h"
-// BTCPKI
+// BCPKI
 //#include "json/json_spirit_utils.h"
 
 #include <list>

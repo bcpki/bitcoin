@@ -8,7 +8,7 @@
 #include <openssl/obj_mac.h>
 
 #include "key.h"
-// BTCPKI
+// BCPKI
 #include "bignum.h"
 
 // Generate a private key from just the secret parameter
@@ -208,8 +208,8 @@ bool CKey::SetPrivKey(const CPrivKey& vchPrivKey)
     return false;
 }
 
-// BTCPKI
-CKey CKey::GetDerivedKey(const uint256& ticket, bool fCompressed) const
+// BCPKI
+CKey CKey::GetDerivedKey(const uint256& ticket) const
 {
   CKey key;
   CBigNum bn(ticket);
@@ -264,12 +264,11 @@ CKey CKey::GetDerivedKey(const uint256& ticket, bool fCompressed) const
     };
 
   key.fSet = true;
-  if (fCompressed)
-    key.SetCompressedPubKey();
+  key.SetCompressedPubKey();
   return key;
 };
 
-bool CKey::SetSecretByNumber(uint256 num, bool fCompressed)
+bool CKey::SetSecretByNumber(uint256 num)
 {
     CBigNum N(num);
 
@@ -281,8 +280,7 @@ bool CKey::SetSecretByNumber(uint256 num, bool fCompressed)
     if (!EC_KEY_regenerate_key(pkey,&N))
         throw key_error("CKey::SetSecret() : EC_KEY_regenerate_key failed");
     fSet = true;
-    if (fCompressed || fCompressedPubKey)
-        SetCompressedPubKey();
+    SetCompressedPubKey();
     return true;
 }
 

@@ -6,6 +6,7 @@
 #include "bitcoinrpc.h"
 #include "ui_interface.h"
 #include "base58.h"
+#include "alias.h" // KeyToJSON
 
 #include <boost/lexical_cast.hpp>
 
@@ -36,45 +37,64 @@ Value importticket(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() < 1 || params.size() > 4)
         throw runtime_error(
-            "importticket <bitcoinaddr> <ticket> [label] [rescan=true]\n"
+            "importticket <bitcoinaddr or pubkey> <ticket> [label] [rescan=true]\n"
             "ticket is in hex format\n"
-            "Adds a private key (as returned by dumpprivkey) to your wallet.");
+            "Adds the private key for (as returned by dumpprivkey) to your wallet.");
 
     string strAddress = params[0].get_str();
     string hexTicket = params[1].get_str();
 
+    if (!IsHex(hexTicket))
+        throw JSONRPCError(RPC_TYPE_ERROR, "ticket is not a valid hex string. odd length?");
+      
     // Whether to perform rescan after import
     bool fRescan = true;
     if (params.size() > 3)
         fRescan = params[3].get_bool();
 
-    // find bitcoinaddr
-    CBitcoinAddress address;
-    if (!address.SetString(strAddress))
-        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Bitcoin address");
+    // find key
     CKeyID keyID;
-    if (!address.GetKeyID(keyID))
+    if (!IsHex(strAddress)) {
+      CBitcoinAddress address;
+      if (!address.SetString(strAddress))
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Bitcoin address");
+      if (!address.GetKeyID(keyID))
         throw JSONRPCError(RPC_TYPE_ERROR, "Address does not refer to a key");
+    } else {
+      keyID = CPubKey(ParseHex(strAddress)).GetID();
+    }
+
     CKey key;
     if (!pwalletMain->GetKey(keyID, key))
-        throw JSONRPCError(RPC_WALLET_ERROR, "Key for address " + strAddress + " not in keystore");
+      throw JSONRPCError(RPC_WALLET_ERROR, "Key for address " + strAddress + " not in keystore");
     if (!key.HasPrivKey())
         throw JSONRPCError(RPC_WALLET_ERROR, "Private key for address " + strAddress + " is not known");
 
-    uint256 ticket;
-    ticket.SetHex(hexTicket);
-    CKey newkey = key.GetDerivedKey(ticket);
+    vector<unsigned char> ticket = ParseHex(hexTicket); // little-endian interpretation
+    ticket.resize(32);
+    CKey newkey = key.GetDerivedKey(uint256(ticket));
+    Object result;
+    if (JSONverbose > 0) {
+      result.push_back(Pair("basekey",KeyToJSON(key)));
+      result.push_back(Pair("ticket",HexStr(ticket.begin(),ticket.end())));
+      result.push_back(Pair("derivedkey",KeyToJSON(newkey)));
+    }
       
-    CKeyID vchAddress = newkey.GetPubKey().GetID();
+    //    CKeyID vchAddress = newkey.GetPubKey().GetID();
     {
         LOCK2(cs_main, pwalletMain->cs_wallet);
 
-        string strLabel = pwalletMain->mapAddressBook[vchAddress] + "<" + hexTicket + ">"; 
+	string strLabel;
+	if (pwalletMain->mapAddressBook.count(key.GetPubKey().GetID()))
+	  strLabel += pwalletMain->mapAddressBook[key.GetPubKey().GetID()];
+	else
+	  strLabel += HexStr(key.GetPubKey().Raw());
+	strLabel += "<" + hexTicket + ">"; 
 	if (params.size() > 2)
 	  strLabel += ": " + params[2].get_str();
 	
         pwalletMain->MarkDirty();
-        pwalletMain->SetAddressBookName(vchAddress, strLabel);
+        pwalletMain->SetAddressBookName(newkey.GetPubKey().GetID(), strLabel);
 
         if (!pwalletMain->AddKey(newkey))
             throw JSONRPCError(RPC_WALLET_ERROR, "Error adding derived key to wallet");
@@ -85,7 +105,7 @@ Value importticket(const Array& params, bool fHelp)
         }
     }
 
-    return Value::null;
+    return result;
 }
 
 Value importprivkey(const Array& params, bool fHelp)
@@ -93,7 +113,8 @@ Value importprivkey(const Array& params, bool fHelp)
     if (fHelp || params.size() < 1 || params.size() > 3)
         throw runtime_error(
             "importprivkey <bitcoinprivkey> [label] [rescan=true]\n"
-            "Adds a private key (as returned by dumpprivkey) to your wallet.");
+            "Adds a private key (as returned by dumpprivkey) to your wallet."
+	    "Now also accepts a little-endian hex number as the secret instead of bitcoinprivkey.\n");
 
     string strSecret = params[0].get_str();
     string strLabel = "";
@@ -105,15 +126,20 @@ Value importprivkey(const Array& params, bool fHelp)
     if (params.size() > 2)
         fRescan = params[2].get_bool();
 
-    CBitcoinSecret vchSecret;
-    bool fGood = vchSecret.SetString(strSecret);
-
-    if (!fGood) throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key");
-
     CKey key;
-    bool fCompressed;
-    CSecret secret = vchSecret.GetSecret(fCompressed);
-    key.SetSecret(secret, fCompressed);
+    if (IsHex(strSecret)) { // hex encoded secret
+      vector<unsigned char> vch = ParseHex(strSecret);
+      vch.resize(32);
+      key.SetSecretByNumber(uint256(vch));
+    } else {
+      CBitcoinSecret vchSecret;
+      if (!vchSecret.SetString(strSecret))
+	throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid private key");
+      bool fCompressed;
+      CSecret secret = vchSecret.GetSecret(fCompressed);
+      key.SetSecret(secret, fCompressed);
+    }
+
     CKeyID vchAddress = key.GetPubKey().GetID();
     {
         LOCK2(cs_main, pwalletMain->cs_wallet);
@@ -135,9 +161,9 @@ Value importprivkey(const Array& params, bool fHelp)
 
 Value dumpprivkey(const Array& params, bool fHelp)
 {
-    if (fHelp || params.size() != 1)
+    if (fHelp || params.size() > 2)
         throw runtime_error(
-            "dumpprivkey <bitcoinaddress>\n"
+            "dumpprivkey <bitcoinaddress> [raw=false]\n"
             "Reveals the private key corresponding to <bitcoinaddress>.");
 
     string strAddress = params[0].get_str();
@@ -151,5 +177,9 @@ Value dumpprivkey(const Array& params, bool fHelp)
     bool fCompressed;
     if (!pwalletMain->GetSecret(keyID, vchSecret, fCompressed))
         throw JSONRPCError(RPC_WALLET_ERROR, "Private key for address " + strAddress + " is not known");
-    return CBitcoinSecret(vchSecret, fCompressed).ToString();
+
+    if (params.size() > 1 && params[1].get_bool())
+      return HexStr(vchSecret.begin(),vchSecret.end());
+    else
+      return CBitcoinSecret(vchSecret, fCompressed).ToString();
 }

@@ -1,0 +1,26 @@
+version: 0.1 # version of corresponding bcert.proto specification
+data:
+  subjectname: # put descriptive long name here
+  contacts: 
+   - type: EMAIL  
+     value: # put email address here 
+   - type: URL  
+     value: "http://" # put url here 
+  paymentkeys:
+    # bitcoin addresses used as public static receiving addresses
+    # comment out if not applicable
+    - algorithm: 
+       type: STATIC_BTCADDR
+      value: [  ] # put bitcoin addresses here  (base58-check encoded as usual)
+    # public key used as basepoint for pay-to-contract address derivation (contract-hash * basepoint)
+    # comment out if not applicable
+    - algorithm:
+       type: P2CSINGLE
+       version: 0.1
+      value: [ ] # put pubkey here (compressed hex format) 
+# signature are commented out by default because bitcoind will set them
+# uncomment if applicable
+##signatures:
+##  algorithm: { type: BCPKI , version: 0.3 } 
+##  value: # put valid alias string here 
+---

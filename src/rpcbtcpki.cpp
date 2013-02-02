@@ -8,6 +8,7 @@
 #include "alias.h" 
 #include "bcert.h"  
 #include "init.h"
+#include "rpctojson.h"
 //in deprecated functions #include <openssl/sha.h>
 
 using namespace json_spirit;
@@ -51,127 +52,140 @@ pubkey_type rpc_buildtype(const string& name) {
   return type;
 }
 
-// RPCs
-Value bcverify(const Array& params, bool fHelp)
-{
-    if (fHelp || params.size() > 2 || params.size() < 1)
-        throw runtime_error(
-            "bcverify <alias> [<hash>]\n"
-            "verify a blockchain signature under name <alias>.\n"
-	    "<hash> is in hex format up to 256 bit (64 characters).\n"
-	    "if no hash is given, we look for a cert for <alias> in .bitcoin/bcerts and verify that.\n");
+vector<vector<unsigned char> > CoinValues(const CCoins coins) {
+  vector<vector<unsigned char> > values;
+  BOOST_FOREACH(const CTxOut &out, coins.vout) {
+    txnouttype typeRet = TX_NONSTANDARD;
+    vector<vector<unsigned char> > vSolutions;
+    if (!Solver(out.scriptPubKey, typeRet, vSolutions))
+      continue;
+    if (typeRet != TX_MULTISIG)
+      continue;
+    if (out.nValue >= BCPKI_MINAMOUNT)
+      values.push_back(vSolutions[1]);
+  }
+  return values;
+}
 
-    Object result;
+void rpc_addtxid(const uint256 txid, Object& result, bool fValues = false) {
+  result.push_back(Pair("txid", txid.ToString()));
+  if (JSONverbose > 0) result.push_back(Pair("tx", TxidToJSON(txid)));
+  CCoins coins;
+  if (!pcoinsTip->GetCoins(txid, coins))
+    throw runtime_error("rpc_addtxid: GetCoins failed.");
+  if ((unsigned int)coins.nHeight == MEMPOOL_HEIGHT)
+    result.push_back(Pair("confirmations", 0));
+  else
+    result.push_back(Pair("confirmations", pcoinsTip->GetBestBlock()->nHeight - coins.nHeight + 1));
+  CBlockIndex *pindex = FindBlockByHeight(coins.nHeight);
+  result.push_back(Pair("strTime", DateTimeStrFormat("%Y-%m-%dT%H:%M:%S", pindex->nTime).c_str()));
+  if (fValues) {
+    vector<vector<unsigned char> > values = CoinValues(coins);
+    BOOST_FOREACH(vector<unsigned char> val, values) {
+      uint160 hash = Hash160(val);
+      result.push_back(Pair("value", HexStr(hash.begin(),hash.end())));
+    }
+  }
+}
 
-    // build alias
-    CAlias alias = rpc_buildalias(params[0].get_str());
-    result.push_back(Pair("alias", alias.ToJSON()));
+void rpc_testnetonly() {
+  if (BCPKI_TESTNETONLY && !fTestNet)
+    throw runtime_error("RPC registeralias: disabled on mainnet");
+}
 
-    // look for cert for alias, just to inform the caller
-    BitcoinCert cert(alias);
-    result.push_back(Pair("cert", cert.ToJSON()));
-    string signee;
-    cert.GetSignee(signee);
-    result.push_back(Pair("signee", signee));
-    CAlias signeealias(signee);
-    result.push_back(Pair("signeeIDHex", signeealias.GetPubKeyIDHex()));
-    result.push_back(Pair("aliasIDHex", alias.GetPubKeyIDHex()));
+int rpc_verify(CAlias alias, CBitcoinCert& cert) {
+  // take cert from bcerts directory
+  // verify signatures
+  // compare alias
 
-    CBcValue val;
-    if (params.size() > 1)
-      val = CBcValue(params[1].get_str());
-    else
+  cert.ReadAliasFile(alias);
+  vector<pair<CAlias, unsigned int> > ret;
+  if (cert.Verify(ret)) {
+    BOOST_FOREACH(const PAIRTYPE(CAlias, unsigned int)& p, ret) 
+      if (p.first == alias) // (p.second >= 6)
+	return p.second;
+  }
+  return -1;
+}
+
+Value rpc_bcsign(const vector<CBcValue> values, const unsigned int nReq, const unsigned int nOwners, vector<CPubKey>& owners, CWalletTx& wtx) {
+  // check arguments
+  {
+    if (nReq < 1 || nOwners > 2)
+      throw JSONRPCError(-8, "nOwners must be 1 or 2");
+    if (nReq < 1 || nReq > nOwners)
+      throw JSONRPCError(-8, "must have 1 <= nReq <= nOwners");
+  }
+
+  // collect output here
+  Object result;
+
+  // collect internal owners
+  {
+    Array ownerArray; // just for return object
+    while (owners.size() < nOwners) {
+      // get new owner pubkey from keypool
+      CPubKey newKey;
+      if (!pwalletMain->GetKeyFromPool(newKey, false))
+	throw JSONRPCError(RPC_WALLET_KEYPOOL_RAN_OUT, "Error: Keypool ran out, please call keypoolrefill first");
+      owners.push_back(newKey);
+      ownerArray.push_back(PubKeyToJSON(newKey));
+    }
+    if (JSONverbose > 0) result.push_back(Pair("owners", ownerArray));
+  }
+  
+  // make output scrips
+  vector<pair<CScript,int64> > vecSend;
+  {
+    Array outs;
+    BOOST_FOREACH(CBcValue val, values)
       {
-	if (!cert.IsSet())
-	  return result;
-	//	  throw runtime_error("cert not found.\n");
-	val = CBcValue(cert.GetHash160());
-	uint256 hash;
-	bcert::BitcoinCertData data = cert.cert.data();
-	string ser;
-	data.SerializeToString(&ser);
-	std::vector<unsigned char> vch(ser.begin(),ser.end());
-	result.push_back(Pair("data", HexStr(vch)));
-	result.push_back(Pair("datastr", HexStr(ser.begin(),ser.end())));
-	uint160 hash160 = Hash160(vch);
-	result.push_back(Pair("datahash160", HexStr(hash160.begin(),hash160.end())));
-	
-	/*
-	string helloStr("hello");
-	std::vector<unsigned char> hello(helloStr.begin(),helloStr.end());
-	result.push_back(Pair("hellohex", HexStr(hello)));
-	result.push_back(Pair("hellohash", Hash(hello.begin(),hello.end()).GetHex()));
-	uint256 hash1;
-	SHA256(&hello[0], hello.size(), (unsigned char*)&hash1);
-	result.push_back(Pair("hellosha", hash1.GetHex()));
-	hash1 = 1;
-	result.push_back(Pair("hello1", hash1.GetHex()));
-	hash1 = 16;
-	result.push_back(Pair("hello16", hash1.GetHex()));
-	hash1 = 256;
-	result.push_back(Pair("hello256", hash1.GetHex()));
-	std::vector<unsigned char> hash2(32,0);
-	SHA256(&hello[0], hello.size(), &hash2[0]);
-	result.push_back(Pair("hash2", HexStr(hash2)));
-	uint256 hash3(hash2);
-	result.push_back(Pair("hash3", hash3.GetHex()));
-	uint256 hash4(HexStr(hash2));
-	result.push_back(Pair("hash4", hash4.GetHex()));
-	*/
+	pair<CScript,int64> out (val.MakeScript(owners,nReq),BCPKI_MINAMOUNT); // require nReq of the owner keys (currently 1 or 2) 
+	vecSend.push_back(out);
+	Object entry;
+	entry.push_back(Pair("value",val.ToJSON()));
+	entry.push_back(Pair("script",ScriptToJSON(out.first)));
+	entry.push_back(Pair("nAmount",BCPKI_MINAMOUNT));
+	outs.push_back(entry);
       }
+    if (JSONverbose > 0) result.push_back(Pair("outs", outs));
+  }
 
-    //    CBcValue val(params[1].get_str());
- 
-    uint256 txid;
-    bool fSigned = alias.VerifySignature(val,txid);
-
-    // compile output
-    if (JSONverbose > 0)
-      result.push_back(Pair("val", val.ToJSON()));
-    result.push_back(Pair("fSigned", fSigned));
-    if (fSigned) {
-      result.push_back(Pair("tx", TxidToJSON(txid)));
-      CCoins coins;
-      if (!pcoinsTip->GetCoins(txid, coins))
-	throw runtime_error("CAlias::VerifySignature: GetCoins failed.");
-      return val.IsValidInCoins(coins);
-      //vector<unsigned int> outs = FindInCoins(coins, (int64) 100*50000, true);
-      vector<unsigned int> outs = val.FindInCoins(coins);
-      result.push_back(Pair("nOut", (int)outs[0]));
+  // Wallet comments
+  {
+    wtx.mapValue["bcsignv"] = BCPKI_SIGVERSION;
+    // values are needed later to spend the outputs for revocation (they need to be imported as privkeys) 
+    wtx.mapValue["bcvalues"] = "";
+    BOOST_FOREACH(CBcValue val, values) {
+      wtx.mapValue["bcvalues"] += "("+val.GetPrivKeyB58()+":"+val.GetLEHex()+")";
     }
-
-    return result;
-}
-
-Value bclist(const Array& params, bool fHelp)
-{
-    if (fHelp || params.size() > 1 || params.size() < 1)
-        throw runtime_error(
-            "bclist <alias>\n"
-            "Returns the unique transaction (or none) that contains the (currently) valid signatures of <alias>.\n");
-
-    Object result;
-
-    // build alias
-    CAlias alias = rpc_buildalias(params[0].get_str());
-    result.push_back(Pair("alias", alias.ToJSON()));
-      
-    // lookup
-    uint256 txid;
-    bool fRegistered = alias.Lookup(txid);
-
-    // compile output
-    result.push_back(Pair("fRegistered", fRegistered));
-    if (fRegistered)
-      result.push_back(Pair("tx", TxidToJSON(txid)));
-    if (JSONverbose > 0) {
-      result.push_back(Pair("alias", alias.ToJSON()));
+    wtx.mapValue["owners"] = "";
+    BOOST_FOREACH(CPubKey owner, owners) {
+      CBitcoinAddress addr;
+      addr.Set(owner.GetID());
+      wtx.mapValue["owners"] += "("+HexStr(owner.Raw())+":"+addr.ToString()+")";
     }
+  }
+
+  // create and commit transaction
+  {
+    CReserveKey keyChange(pwalletMain);
+    int64 nFeeRequired;
+    if (!pwalletMain->CreateTransaction(vecSend,wtx,keyChange,nFeeRequired))
+      throw JSONRPCError(RPC_WALLET_ERROR, "Transaction creation failed. Sufficient funds?");
+    result.push_back(Pair("nFee", ValueFromAmount(nFeeRequired)));
+    if (JSONverbose > 0) result.push_back(Pair("changeKey", PubKeyToJSON(keyChange.GetReservedKey())));
     
-    return result;
+    if (!pwalletMain->CommitTransaction(wtx, keyChange))
+      throw JSONRPCError(RPC_WALLET_ERROR, "Transaction commit failed");
+    result.push_back(Pair("txid", wtx.GetHash().GetHex()));
+  }
+
+  return result;
 }
 
-
+// RPCs alias...
+// do not access blockchain
 Value aliasnew(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() < 2 || params.size() > 3)
@@ -236,6 +250,121 @@ Value aliasget(const Array& params, bool fHelp)
     return ret;
 }
 
+Value aliasdump(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 1)
+        throw runtime_error(
+            "aliasget <alias>\n"
+            "Returns different values associated with alias: the normalized alias, the hash of that (called the \"bcvalue\"), the derived pubkey (bcvalue*basepoint of curve, called the \"pubkey\"), the hash of that pubkey (called the \"id\"), and that hash b58encoded into a bitcoin address (called the \"address\")."
+	    "The id (equivalently, the address) can be calculated from any of the other values, is therefore used as a locator (e.g. database index, filename) for meta-data associated with alias.\n");
+
+    string str = params[0].get_str();
+    if (IsHex(str)) {
+      CBcValue val(str);
+      return val.ToJSON();
+    } else {
+      CAlias alias = rpc_buildalias(str);
+      return alias.ToJSON();
+    }
+}
+  
+// RPCs bcalias...
+// access blockchain
+Value bcverify(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() > 2 || params.size() < 1)
+        throw runtime_error(
+            "bcverify <alias> [<hash>]\n"
+            "verify a blockchain signature under name <alias>.\n"
+	    "<hash> is in hex format up to 256 bit (64 characters).\n"
+	    "if no hash is given, we look for a cert for <alias> in .bitcoin/bcerts and verify that.\n");
+
+    Object result;
+
+    // build alias
+    CAlias alias = rpc_buildalias(params[0].get_str());
+    if (JSONverbose > 0) result.push_back(Pair("alias", alias.ToJSON()));
+
+    // look for cert for alias, just to inform the caller
+    CBitcoinCert cert(alias);
+    if (JSONverbose > 0) result.push_back(Pair("cert", cert.ToJSON()));
+
+    CBcValue val;
+    if (params.size() > 1)
+      val = CBcValue(params[1].get_str());
+    else
+      {
+	if (!cert.IsSet())
+	  throw runtime_error("cert not found.\n");
+	val = CBcValue(cert.GetHash160());
+	
+	/*
+	string helloStr("hello");
+	std::vector<unsigned char> hello(helloStr.begin(),helloStr.end());
+	result.push_back(Pair("hellohex", HexStr(hello)));
+	result.push_back(Pair("hellohash", Hash(hello.begin(),hello.end()).GetHex()));
+	uint256 hash1;
+	SHA256(&hello[0], hello.size(), (unsigned char*)&hash1);
+	result.push_back(Pair("hellosha", hash1.GetHex()));
+	hash1 = 1;
+	result.push_back(Pair("hello1", hash1.GetHex()));
+	hash1 = 16;
+	result.push_back(Pair("hello16", hash1.GetHex()));
+	hash1 = 256;
+	result.push_back(Pair("hello256", hash1.GetHex()));
+	std::vector<unsigned char> hash2(32,0);
+	SHA256(&hello[0], hello.size(), &hash2[0]);
+	result.push_back(Pair("hash2", HexStr(hash2)));
+	uint256 hash3(hash2);
+	result.push_back(Pair("hash3", hash3.GetHex()));
+	uint256 hash4(HexStr(hash2));
+	result.push_back(Pair("hash4", hash4.GetHex()));
+	*/
+      }
+
+    //    CBcValue val(params[1].get_str());
+ 
+    uint256 txid;
+    bool fSigned = alias.VerifySignature(val,txid);
+    // TODO should also return the outpoint
+    // vector<unsigned int> outs = val.FindInCoins(coins); // default: (int64) BCPKI_MINAMOUNT, true
+
+    // compile output
+    if (JSONverbose > 0)
+      result.push_back(Pair("val", val.ToJSON()));
+    result.push_back(Pair("fSigned", fSigned));
+    if (fSigned) {
+      rpc_addtxid(txid,result);
+    }
+
+    return result;
+}
+
+Value bclist(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() > 1 || params.size() < 1)
+        throw runtime_error(
+            "bclist <alias>\n"
+            "Returns the unique transaction (or none) that contains the (currently) valid signatures of <alias>.\n");
+
+    Object result;
+
+    // build alias
+    CAlias alias = rpc_buildalias(params[0].get_str());
+      
+    // lookup
+    uint256 txid;
+    bool fRegistered = alias.Lookup(txid);
+
+    // compile output
+    result.push_back(Pair("fRegistered", fRegistered));
+    if (JSONverbose > 0) result.push_back(Pair("alias", alias.ToJSON()));
+    if (fRegistered) rpc_addtxid(txid,result,true);
+    
+    return result;
+}
+
+
 Value bcsign(const Array& params, bool fHelp)
 {
   if (fHelp || params.size() < 1 || params.size() > 2)
@@ -259,9 +388,8 @@ Value bcsign(const Array& params, bool fHelp)
       
       throw runtime_error(msg);
     }
-    // testnet only?
-    if (BTCPKI_TESTNETONLY && !fTestNet)
-      throw runtime_error("RPC bcsign: disabled on mainnet");
+
+  rpc_testnetonly();
     
     // collect output in here
     Object result;
@@ -283,7 +411,7 @@ Value bcsign(const Array& params, bool fHelp)
       if (find_value(aliasObj, "alias").type() == null_type)
         throw JSONRPCError(-8, "alias missing");
       aliasStr = find_value(aliasObj, "alias").get_str();
-      result.push_back(Pair("aliasStr", aliasStr));
+      if (JSONverbose > 0) result.push_back(Pair("aliasStr", aliasStr));
   
       // count owners
       if (find_value(aliasObj, "owners").type() != null_type) {
@@ -310,8 +438,10 @@ Value bcsign(const Array& params, bool fHelp)
   	  throw JSONRPCError(-8, "n must be <= number of owners");
       }
   
-      result.push_back(Pair("nOwners", (int)nOwners));
-      result.push_back(Pair("nReq", (int)nReq));
+      if (JSONverbose > 0) {
+	result.push_back(Pair("nOwners", (int)nOwners));
+	result.push_back(Pair("nReq", (int)nReq));
+      }
       // collect owners
       // external owners first
       if (find_value(aliasObj, "owners").type() != null_type) {
@@ -336,10 +466,13 @@ Value bcsign(const Array& params, bool fHelp)
     }
     
     // build alias
-    CAlias alias(aliasStr);
-    if (!alias.IsSet())
-      throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC getregistrations: alias may contain only characters a-z,A-Z,0-1,_,-, must start with letter and not end in _,-");
-    result.push_back(Pair("aliasArg", alias.ToJSON()));
+    CAlias alias = rpc_buildalias(aliasStr);
+    if (JSONverbose > 0) result.push_back(Pair("aliasArg", alias.ToJSON()));
+      
+    // test lookup
+    uint256 txid;
+    if (!(JSONverbose > 0) && alias.Lookup(txid))
+      throw runtime_error("RPC bcsign: valid signature already present in blockchain. not signing again.");
 
     // collect values including alias
     vector<CBcValue> values (1,alias);
@@ -357,10 +490,11 @@ Value bcsign(const Array& params, bool fHelp)
       }
     }
 
+    // TODO this should be removed from here into bcsigncert, right?
     // add cert value
     if (fCertVal) {
-      BitcoinCert cert(alias);
-      result.push_back(Pair("cert", cert.ToJSON()));
+      CBitcoinCert cert(alias);
+      if (JSONverbose > 0) result.push_back(Pair("cert", cert.ToJSON()));
       /*
       string signee;
       cert.GetSignee(signee);
@@ -369,7 +503,7 @@ Value bcsign(const Array& params, bool fHelp)
       result.push_back(Pair("signeeIDHex", signeealias.GetPubKeyIDHex()));
       result.push_back(Pair("aliasIDHex", alias.GetPubKeyIDHex()));
       */
-      if (!(cert.IsSet() && cert.IsSigneeMatch()))
+      if (!(cert.IsSet()))
 	//throw JSONRPCError(-8, "warning: certificate signature does not seem to match alias");
 	return result;
       values.push_back(CBcValue(cert.GetHash160()));
@@ -382,118 +516,231 @@ Value bcsign(const Array& params, bool fHelp)
       owners.push_back(owner);
       ownerArray.push_back(PubKeyToJSON(owner));
     }
-    result.push_back(Pair("owners", ownerArray));
+    if (JSONverbose > 0) result.push_back(Pair("owners", ownerArray));
 
     // build output scripts
     vector<pair<CScript,int64> > vecSend;
     Array outs;
     BOOST_FOREACH(CBcValue val, values)
       {
-	pair<CScript,int64> out (val.MakeScript(owners,nReq),100*50000); // require nReq of the owner keys (currently 1 or 2) 
+	pair<CScript,int64> out (val.MakeScript(owners,nReq),BCPKI_MINAMOUNT); // require nReq of the owner keys (currently 1 or 2) 
 	vecSend.push_back(out);
 	Object entry;
 	entry.push_back(Pair("value",val.ToJSON()));
 	entry.push_back(Pair("script",ScriptToJSON(out.first)));
-	entry.push_back(Pair("nAmount",100*50000));
+	entry.push_back(Pair("nAmount",BCPKI_MINAMOUNT));
 	outs.push_back(entry);
       }
-    result.push_back(Pair("outs", outs));
+    if (JSONverbose > 0) result.push_back(Pair("outs", outs));
 
     // Wallet comments
     CWalletTx wtx;
-    wtx.mapValue["comment"] = "signature v";
-    wtx.mapValue["comment"] += BTCPKI_VERSION;
-    wtx.mapValue["comment"] += ": " + alias.GetName();
+    Value bcsigned = rpc_bcsign(values,nReq,owners.size(),owners,wtx);
+    result.push_back(Pair("bcsigned", bcsigned));
 
-    // create transaction
-    CReserveKey keyChange(pwalletMain);
-    int64 nFeeRequired;
-    if (!pwalletMain->CreateTransaction(vecSend,wtx,keyChange,nFeeRequired))
-      throw JSONRPCError(RPC_WALLET_ERROR, "Transaction creation failed. Sufficient funds?");
-    result.push_back(Pair("nFee", ValueFromAmount(nFeeRequired)));
-
-    // commit
-    if (!pwalletMain->CommitTransaction(wtx, keyChange))
-      throw JSONRPCError(RPC_WALLET_ERROR, "Transaction commit failed");
-    result.push_back(Pair("txid", wtx.GetHash().GetHex()));
-
-    // after successful commit we save the alias pubkey in an account
-    // TODO we don't check if it is new
+    wtx.mapValue["signature"] = alias.GetName();
+    // after successful commit we save the alias pubkey id in an account
+    // we deliberately do not add the alias' priv key to our wallet, so the blockchain signature can not be accidentally revoked
+    // note that pwalletMain->LockCoin(outpt) would not lock the output permanently, not across restarts
+    // to revoke the user has to first import the privkey by hand (from the wtx comment field) and then use the spendoutput-RPC
     pwalletMain->SetAddressBookName(alias.GetPubKeyID(), alias.addressbookname(ADDR));
-    // disabled: add alias priv key to wallet (this prevents accidentally revoking the registration because the output remains unspendable)
-    // note that pwalletMain->LockCoin(outpt) locks only temporarily, no across restarts
-    // make an import-RPC for that containing this: pwalletMain->AddKey(alias.GetKey())
-
-    // after successful commit we save the value pubkeys in their own accounts
-    // TODO give the cert a more descriptive label
+    
+    // after successful commit we save the value pubkeys ids in their own accounts
     BOOST_FOREACH(CBcValue val, values) {
       pwalletMain->SetAddressBookName(val.GetPubKeyID(), val.addressbookname());
-      // make an import-RPC for that containing this: pwalletMain->AddKey(val.GetKey())
     }
     
     return result;
 } // bcsign
 
-// TODO implement this, taking payment keys from cert
-Value sendtoaliasowner(const Array& params, bool fHelp)
+Value bcsigncert(const Array& params, bool fHelp)
 {
-    if (fHelp || params.size() < 2 || params.size() > 3)
-        throw runtime_error(
-            "sendtoaliasowner <alias> <amount> [ticket]\n"
-	    "a registration for <alias> is looked up in the blockchain"
-	    "funds are sent to the owner pubkey"
-	    "if there are several registration entries then the first one is chosen"
-            "<amount> is a real and is rounded to the nearest 0.00000001"
-	    "<ticket> is a hex number, if given then funds are sent to ticket*ownerpubkey" 
-            + HelpRequiringPassphrase());
+  if (fHelp || params.size() < 1 || params.size() > 2)
+    {
+      string msg = "bcsigncert <alias> <hex cert>\n"
+	"The first argument is a valid alias name (limited charset, etc)."
+	"The second argument is a hex serialized protobuf message containing the certificate.\n";
+      
+      throw runtime_error(msg);
+    }
+  // build alias
+  CAlias alias = rpc_buildalias(params[0].get_str());
 
-    return 0;
+  // test lookup
+  uint256 txid;
+  if (!(JSONverbose > 0) && alias.Lookup(txid))
+    throw runtime_error("RPC bcsigncert: valid signature already present in blockchain. not signing again.");
+
+  // backward compatibility (one arg version)
+  if (params.size() == 1) {
+    Array arr;
+    Object obj;
+    obj.push_back(Pair("alias",alias.GetName()));
+    arr.push_back(obj);
+    return bcsign(arr,fHelp);
+  }
+
+  // build cert value
+  if (!IsHex(params[1].get_str()))
+    throw runtime_error("bcsigncert: second argument is not a hex string.");
+  CBitcoinCert cert(params[1].get_str());
+  CBcValue certval(cert.GetHash160());
+
+  // build values vector
+  vector<CBcValue> values;
+  values.push_back(alias);
+  values.push_back(certval); 
+  vector<CPubKey> owners; // empty
+
+  // sign
+  CWalletTx wtx;
+  Value result = rpc_bcsign(values,1,1,owners,wtx);
+  result.get_obj().push_back(Pair("fname",alias.GetPubKeyIDHex()));
+
+  // additional wallet comments
+  wtx.mapValue["signature"] = alias.GetName();
+  // after successful commit we save the alias pubkey id in an account
+  // we deliberately do not add the alias' priv key to our wallet, so the blockchain signature can not be accidentally revoked
+  // note that pwalletMain->LockCoin(outpt) would not lock the output permanently, not across restarts
+  // to revoke the user has to first import the privkey by hand (from the wtx comment field) and then use the spendoutput-RPC
+  pwalletMain->SetAddressBookName(alias.GetPubKeyID(), alias.addressbookname(ADDR));
+  pwalletMain->SetAddressBookName(owners[0].GetID(), alias.addressbookname(OWNER));
+  pwalletMain->SetAddressBookName(certval.GetPubKeyID(), certval.addressbookname());
+
+  // add signature field to cert
+  cert.AddSignature(alias);
+
+  // store 
+  cert.SaveAll();
+  
+  return result;
 }
 
-/* deprecated
-    // testnet only?
-    if (BTCPKI_TESTNETONLY && !fTestNet)
-      throw runtime_error("RPC registeralias: disabled on mainnet");
-    
-    // build alias
-    CAlias alias(params[0].get_str());
-    if (!alias.IsSet())
-      throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC sendtoaliasowner: alias may contain only characters a-z,A-Z,0-1,_,-, must start with letter and not end in _,-");
+// RPCs send..
+Value sendtoalias(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() < 2 || params.size() > 4)
+        throw runtime_error(
+            "sendtoalias <alias> '[method,values,...]' <amount> [minconf=6]\n"
+	    "a cert for alias is looked up in .bitcoin/testnet3/bcerts, parsed, and verified."
+	    "method is an integer: 4 for static, 1 for pecsingle; further values depend on method."
+	    "if successful then funds are sent to the static bitcoin address contained in that certificate."
+            "<amount> is a real and is rounded to the nearest 0.00000001"
+            + HelpRequiringPassphrase());
 
-    // Amount
-    int64 nAmount = AmountFromValue(params[1]);
+    // Minimum confirmations
+    int nMinDepth = 6;
+    if (params.size() > 3)
+        nMinDepth = params[3].get_int();
+
+    rpc_testnetonly();
+    CAlias alias = rpc_buildalias(params[0].get_str());
+    int64 nAmount = AmountFromValue(params[2]);
+
+    CBitcoinCert cert;
+    int nConfirmations = rpc_verify(alias,cert);
+    if (nConfirmations < 0)
+      throw runtime_error("sendtoalias: cert did not verify.");
+
+    if (nConfirmations < nMinDepth)
+      throw runtime_error(strprintf("sendtoalias: cert has only %d confirmations.",nConfirmations));
 
     if (pwalletMain->IsLocked())
         throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED, "Error: Please enter the wallet passphrase with walletpassphrase first.");
 
-    // Lookup
-    CRegistration reg;
-    if (!reg.Lookup(alias))
-      throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "RPC sendtoaliasowner: alias not registered in the blockchain.");
+    // Method
+    Array method = params[1].get_array();
+    if (method.size() == 0)
+      throw runtime_error("sendtoalias: no method given, take first method from cert, not yet implemented.");
 
-    // Wallet comments
-    CWalletTx wtx;
-    wtx.mapValue["to"]      = "BTCPKI alias: " + alias.GetName();
+    //    if (!RPCTypeCheck(method, list_of(int_type)))
+    // throw runtime_error("sendtoalias: method must be int_type.");
 
+    unsigned int methodtype = method[0].get_int();
     CBitcoinAddress address;
-    // Ticket
-    if (params.size() > 2 && params[2].type() != null_type && !params[2].get_str().empty())
-      {
-	string hexticket = params[2].get_str();
-	uint256 ticket;
-	ticket.SetHex(hexticket);
-	wtx.mapValue["comment"] = "Pay2Contract ticket: " + hexticket;
-        address = reg.GetEntry(0).GetDerivedOwnerAddr(ticket);
-      }
-    else
-      address = reg.GetEntry(0).GetOwnerAddr();
-      
+    CWalletTx wtx;
+    switch (methodtype) {
+    case 4: // STATICADDR
+      if (!cert.GetStatic(address))
+	throw runtime_error("sendtoalias: cert does not contain static address.");
+      wtx.mapValue["to"]      = alias.GetNormalized() + "<STATICADDR> = " + address.ToString();
+      break;
+    case 1: // P2CSINGLE
+      CPubKey base;
+      if (!cert.GetP2CSingle(base))
+	throw runtime_error("sendtoalias: cert does not contain P2CSINGLE address.");
+      if (method.size() < 2)
+	throw runtime_error("sendtoalias: method type P2CSINGLE requires ticket.");
+      vector<unsigned char> vch = ParseHex(method[1].get_str());
+      wtx.mapValue["p2csingle"] = HexStr(base.Raw());
+      wtx.mapValue["ticket"] += HexStr(vch);
+      wtx.mapValue["to"] = alias.GetNormalized() + "<P2CSINGLE:" + HexStr(vch) + "> = ";
+      vch.resize(32);
+      CKey baseKey;
+      baseKey.SetPubKey(base);
+      address = CBitcoinAddress(baseKey.GetDerivedKey(uint256(vch)).GetPubKey().GetID());
+      wtx.mapValue["to"] += address.ToString();
+    }
+
     // Sending
     string strError = pwalletMain->SendMoneyToDestination(address.Get(), nAmount, wtx);
     if (strError != "")
-        throw JSONRPCError(RPC_WALLET_ERROR, strError);
+      throw JSONRPCError(RPC_WALLET_ERROR, strError);
 
-    return wtx.GetHash().GetHex();
+    // compile output
+    Object result;
+    if (JSONverbose > 0) result.push_back(Pair("nConfirmations",nConfirmations));
+    result.push_back(Pair("dest",address.ToString()));
+    result.push_back(Pair("txid", wtx.GetHash().GetHex()));
+
+    return result;
 }
-*/
+
+Value spendoutpoint(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() < 2 || params.size() > 2)
+        throw runtime_error(
+            "spendoutpoint <txid> <n>\n"
+	    "spends the n-th output of txid to a change address.\n");
+
+    RPCTypeCheck(params, list_of(str_type)(int_type));
+    
+
+    if (pwalletMain->IsLocked())
+        throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED, "Error: Please enter the wallet passphrase with walletpassphrase first.");
+     
+    // Wallet comments
+    CWalletTx wtx;
+    wtx.mapValue["comment"] = strprintf("spending outpoint (%s,%d)",params[0].get_str().c_str(),params[1].get_int());
+    wtx.mapValue["to"]      = "our change address";
+
+    // compile output
+    Object result;
+
+    // create
+    vector<pair<CScript, int64> > vecSend;
+    CReserveKey keyChange(pwalletMain);
+    int64 nFeeRequired = 0;
+    vector<COutPoint> vecSpend;
+    vecSpend.push_back(COutPoint(uint256(params[0].get_str()),params[1].get_int()));
+    if (JSONverbose > 0) {
+      Array entries;
+      BOOST_FOREACH(COutPoint outp, vecSpend) 
+	entries.push_back(OutPointToJSON(outp));
+      result.push_back(Pair("outpoints", entries));
+    }
+    bool fCreated = pwalletMain->CreateTransaction(vecSend, wtx, keyChange, nFeeRequired, vecSpend);
+    if (!fCreated)
+      throw JSONRPCError(RPC_WALLET_ERROR, "Transaction creation failed");
+    result.push_back(Pair("nFee", ValueFromAmount(nFeeRequired)));
+    if (JSONverbose > 0) result.push_back(Pair("changeKey", PubKeyToJSON(keyChange.GetReservedKey())));
+
+    // commit
+    if (!pwalletMain->CommitTransaction(wtx, keyChange))
+        throw JSONRPCError(RPC_WALLET_ERROR, "Transaction commit failed");
+    result.push_back(Pair("txid", wtx.GetHash().GetHex()));
+    if (JSONverbose > 0) result.push_back(Pair("wtx", rpc_TxToJSON(wtx)));
+
+    return result;
+}
 

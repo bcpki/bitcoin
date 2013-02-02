@@ -12,6 +12,7 @@ using namespace json_spirit;
 
 /* CBcValue */
 
+/* deprecated
 void CBcValue::init_uint256(const uint256 val) {
   value = val;
   key.SetSecretByNumber(val);
@@ -20,28 +21,43 @@ void CBcValue::init_uint256(const uint256 val) {
 }
 
 bool CBcValue::init_vch(vector<unsigned char> vch) {
-  if (vch.size() > 32)
+  if (vch.size() > 20)
     return false;
-  vch.resize(32);
-  uint256 val(vch);
-  init_uint256(val); 
+  vch.resize(20);
+  uint160 value(vch);
+  init_uint160(value); 
   return fSet;
 }
+*/
 
-bool CBcValue::init_uint160(uint160 val) {
-  std::vector<unsigned char> vch(val.begin(),val.end());
-  return init_vch(vch);
+bool CBcValue::init() {
+  fSet = key.SetSecretByNumber(Get256());
+  if (fSet)
+    keyID = key.GetPubKey().GetID();
+  return fSet;
 };
 
 CBcValue::CBcValue(const string& str) {
     if (!IsHex(str))
       throw runtime_error("CBcValue::CBcValue:: hash not in hex format");
 
-    if (str.size() > 64)
-      throw runtime_error("CBcValue::CBcValue:: hex str is more than 64 characters (32 bytes)");
+    if (str.size() > 40)
+      throw runtime_error("CBcValue::CBcValue:: hex str is more than 40 characters (20 bytes)");
 
-    init_vch(ParseHex(str));
+    vch = ParseHex(str);
+    init();
 }
+
+bool CBcValue::setValue(uint160 n) {
+  vch = vector<unsigned char>(n.begin(),n.end());
+  return init();
+}
+
+string CBcValue::GetPrivKeyB58() const {
+  bool fCompressed;
+  CSecret secret = key.GetSecret(fCompressed);
+  return CBitcoinSecret(secret,true).ToString();
+} 
 
 bool CBcValue::AppearsInScript(const CScript script, bool fFirst) const {
   txnouttype typeRet = TX_NONSTANDARD;
@@ -97,12 +113,22 @@ CScript CBcValue::MakeScript(const vector<CPubKey> owners, const unsigned int nR
   return script;
 };
 
+void CBcValue::_toJSON(Object& result) {
+  result.push_back(Pair("bcvalue", GetLEHex()));
+  if (JSONverbose > 0) {
+    result.push_back(Pair("fSet", IsSet()));
+    result.push_back(Pair("bigendian", Get256().GetHex()));
+    result.push_back(Pair("key", KeyToJSON(key)));
+  }
+  result.push_back(Pair("privkey", GetPrivKeyB58()));
+  result.push_back(Pair("pubkey", GetPubKeyHex()));
+  result.push_back(Pair("id", GetPubKeyIDHex()));
+  result.push_back(Pair("addr", CBitcoinAddress(GetPubKeyID()).ToString()));
+}
+
 Object CBcValue::ToJSON() {
   Object result;
-  result.push_back(Pair("value-LE", GetLEHex()));
-  result.push_back(Pair("pubkey", GetPubKeyHex()));
-  result.push_back(Pair("pubkeyhash", GetPubKeyIDHex()));
-  result.push_back(Pair("addr", CBitcoinAddress(GetPubKeyID()).ToString()));
+  _toJSON(result);
   return result;
 }
 
@@ -149,7 +175,7 @@ string CAlias::normalize(const string& str) {
     result += c;
     last = c;
   }
-  return BTCPKI_PREFIX + result;
+  return BCPKI_SIGPREFIX + result;
 }
 
 CAlias::CAlias(const string& str) {
@@ -157,10 +183,9 @@ CAlias::CAlias(const string& str) {
     {
     name = str;
     normalized = normalize(name);
-    vector<unsigned char> vch(normalized.begin(),normalized.end());
-    hash = Hash160(vch);
-    init_uint160(hash);
-    //init_uint256(Hash(vch.begin(),vch.end()));
+    uint160 n = Hash160(vector<unsigned char>(normalized.begin(),normalized.end()));
+    if (!setValue(n))
+      throw runtime_error("CAlias::CAlias(string): initialization error.");
     }
 }
 
@@ -175,13 +200,9 @@ string CAlias::addressbookname(pubkey_type type) const {
       return normalized+"_BASE";
     case DERIVED:
       return normalized+"_DERIVED";
-      /*
-    case CERT: // should be deprecated
-      return name+"_CERT_"+BTCPKI_VERSION;
-    default:
-      return "";
-      */
     }
+  throw runtime_error("CAlias::addressbookname: unknown type.");
+  return "";
 } 
 
 /* deprecated
@@ -240,19 +261,19 @@ bool CAlias::VerifySignature(const CBcValue val, uint256& txidRet) const {
   
 Object CAlias::ToJSON() {
   Object result;
-  result.push_back(Pair("normalized", normalized));
-  result.push_back(Pair("pubkeyhash", GetPubKeyIDHex()));
   if (JSONverbose > 0) {
-    result.push_back(Pair("fSet", fSet));
     result.push_back(Pair("str", name));
-    result.push_back(Pair("hash160", HexStr(hash.begin(),hash.end())));
-    result.push_back(Pair("bcvalue", CBcValue::ToJSON()));
+    result.push_back(Pair("fSet", fSet));
   }
+  result.push_back(Pair("normalized", normalized));
+  _toJSON(result);
+  if (JSONverbose > 0) result.push_back(Pair("owner account", addressbookname(OWNER)));
   return result;
 }
 
 /* CRegistrationEntry */
 
+/* deprecated 26.1.13
 CRegistrationEntry::CRegistrationEntry(const CAlias& alias, const CPubKey& owner, const uint256& certhash) {
   aliasKey = alias.GetKey();
   ownerKey.SetPubKey(owner);
@@ -274,6 +295,7 @@ CScript CRegistrationEntry::GetScript() const {
 
   return script;
 };
+*/
   
 /* deprecated
 bool CRegistrationEntry::SetByScript(const CScript& scriptPubKey) {
@@ -297,6 +319,7 @@ bool CRegistrationEntry::SetByScript(const CScript& scriptPubKey) {
 }
 */
 
+/* deprecated 26.1.13
 int64 CRegistrationEntry::GetNValue() const {
   CCoins coins;
   pcoinsTip->GetCoins(outpt.hash, coins);
@@ -321,6 +344,7 @@ Object CRegistrationEntry::ToJSON() const {
     }
   return result;
 }
+*/
 
 /* CRegistration */
 
@@ -345,6 +369,7 @@ bool CRegistration::Lookup(const CAlias& alias) {
 };
 */
 
+/* deprecated 26.1.13
 Object CRegistration::ToJSON() const {
   Object result;
   result.push_back(Pair("fBacked", fBacked));
@@ -366,6 +391,7 @@ Object CRegistration::ToJSON() const {
   
   return result;
 }
+*/
 
 /* CPubKey */
 
@@ -383,13 +409,15 @@ Object PubKeyToJSON(const CPubKey& key) {
 Object KeyToJSON(const CKey& key) {
   Object result;
   result.push_back(Pair("pubkey", HexStr(key.GetPubKey().Raw())));
+  CKeyID keyID = key.GetPubKey().GetID();
+  result.push_back(Pair("id", HexStr(keyID.begin(),keyID.end())));
   result.push_back(Pair("addr", CBitcoinAddress(key.GetPubKey().GetID()).ToString()));
   if (key.HasPrivKey())
     {
-      //    result.push_back(Pair("privkey", HexStr(pk.begin(),pk.end())));
       bool fCompr;
       const CSecret& sec = key.GetSecret(fCompr);
-      result.push_back(Pair("secret", HexStr(sec.begin(),sec.end())));
+      result.push_back(Pair("value", HexStr(sec.begin(),sec.end())));
+      result.push_back(Pair("privkey", CBitcoinSecret(sec,fCompr).ToString()));
     }
   return result;
 };
@@ -443,5 +471,5 @@ Object TxidToJSON(const uint256& txid) {
   return result;
 };
 
-  
+
 

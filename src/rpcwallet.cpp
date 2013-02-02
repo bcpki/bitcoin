@@ -12,6 +12,7 @@
 #include "base58.h"
 #include "alias.h"
 #include "bcert.h"
+#include "rpctojson.h"
 
 using namespace std;
 using namespace boost;
@@ -1225,6 +1226,7 @@ Value gettransaction(const Array& params, bool fHelp)
     Array details;
     ListTransactions(wtx, "*", 0, false, details);
     entry.push_back(Pair("details", details));
+    entry.push_back(Pair("decode", rpc_TxToJSON(wtx)));
 
     return entry;
 }
