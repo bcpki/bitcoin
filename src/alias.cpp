@@ -418,7 +418,7 @@ Object KeyToJSON(const CKey& key) {
       bool fCompr;
       const CSecret& sec = key.GetSecret(fCompr);
       result.push_back(Pair("secret", HexStr(sec.begin(),sec.end())));
-      result.push_back(Pair("privkey", CBitcoinSecret(sec,false).ToString()));
+      result.push_back(Pair("privkey", CBitcoinSecret(sec,true).ToString()));
     }
   return result;
 };

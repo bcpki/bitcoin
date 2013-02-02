@@ -570,7 +570,7 @@ Value bcsigncert(const Array& params, bool fHelp)
   CWalletTx wtx;
   Value bcsignresult = rpc_bcsign(values,nReq,nOwners,owners,wtx);
   bcsignresult.get_obj().push_back(Pair("fname",alias.GetPubKeyIDHex()));
-  if (JSONverbose > 0) result.push_back(Pair("bssignresult", bcsignresult));
+  if (JSONverbose > 0) result.push_back(Pair("bcsignresult", bcsignresult));
 
   // additional wallet comments
   wtx.mapValue["signature"] = alias.GetName();
@@ -632,15 +632,20 @@ Value sendtoalias(const Array& params, bool fHelp)
     // throw runtime_error("sendtoalias: method must be int_type.");
 
     unsigned int methodtype = method[0].get_int();
-    CBitcoinAddress address;
+    CTxDestination dest;
     CWalletTx wtx;
     switch (methodtype) {
     case 4: // STATICADDR
+      {
+      CBitcoinAddress address;
       if (!cert.GetStatic(address))
 	throw runtime_error("sendtoalias: cert does not contain static address.");
       wtx.mapValue["to"]      = alias.GetNormalized() + "<STATICADDR> = " + address.ToString();
+      dest = address.Get(); 
+      }
       break;
     case 1: // P2CSINGLE
+      {
       CPubKey base;
       if (!cert.GetP2CSingle(base))
 	throw runtime_error("sendtoalias: cert does not contain P2CSINGLE address.");
@@ -653,19 +658,49 @@ Value sendtoalias(const Array& params, bool fHelp)
       vch.resize(32);
       CKey baseKey;
       baseKey.SetPubKey(base);
-      address = CBitcoinAddress(baseKey.GetDerivedKey(uint256(vch)).GetPubKey().GetID());
-      wtx.mapValue["to"] += address.ToString();
+      dest = baseKey.GetDerivedKey(uint256(vch)).GetPubKey().GetID();
+      }
+      break;
+    case 2: // P2CMULTI
+      {
+      unsigned int nReq;
+      vector<CPubKey> base;
+      if (!cert.GetP2CMulti(nReq,base))
+	throw runtime_error("sendtoalias: cert does not contain P2CSINGLE address.");
+      if (method.size() < 2)
+	throw runtime_error("sendtoalias: method type P2CSINGLE requires ticket.");
+      vector<unsigned char> vch = ParseHex(method[1].get_str());
+      wtx.mapValue["ticket"] += HexStr(vch);
+      wtx.mapValue["to"] = alias.GetNormalized() + "<P2CMULTI:" + HexStr(vch) + "> = ";
+      vch.resize(32);
+      wtx.mapValue["p2cmulti"] = "";
+      vector<CKey> derived;
+      BOOST_FOREACH(CPubKey p, base) {
+	wtx.mapValue["p2cmulti"] += HexStr(p.Raw()) + " ";
+	CKey k;
+	k.SetPubKey(p);
+	derived.push_back(k.GetDerivedKey(uint256(vch)));
+      }
+      CScript script;
+      script.SetMultisig(nReq,derived);
+      wtx.mapValue["to"] += script.ToString();
+      dest = script.GetID();
+      }
+      break;
+    default:
+      throw runtime_error("sendtoalias: unknown payment method. only now 1=P2CSINGLE, 2=P2CMULTI, 4=STATICADDR.");
     }
 
     // Sending
-    string strError = pwalletMain->SendMoneyToDestination(address.Get(), nAmount, wtx);
+    string strError = pwalletMain->SendMoneyToDestination(dest, nAmount, wtx);
     if (strError != "")
       throw JSONRPCError(RPC_WALLET_ERROR, strError);
 
     // compile output
     Object result;
     if (JSONverbose > 0) result.push_back(Pair("nConfirmations",nConfirmations));
-    result.push_back(Pair("dest",address.ToString()));
+    // TODO CTxDestination -> string?
+    //    result.push_back(Pair("dest",address.ToString()));
     result.push_back(Pair("txid", wtx.GetHash().GetHex()));
 
     return result;
@@ -679,7 +714,6 @@ Value spendoutpoint(const Array& params, bool fHelp)
 	    "spends the n-th output of txid to a change address.\n");
 
     RPCTypeCheck(params, list_of(str_type)(int_type));
-    
 
     if (pwalletMain->IsLocked())
         throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED, "Error: Please enter the wallet passphrase with walletpassphrase first.");

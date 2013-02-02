@@ -34,6 +34,7 @@ class CBitcoinCert {
   bool HasSignee(const CAlias alias) const;
   bool GetStatic(CBitcoinAddress& addr) const;
   bool GetP2CSingle(CPubKey& pubkey) const;
+  bool GetP2CMulti(unsigned int& nReq, std::vector<CPubKey>& pubkey) const;
   uint160 GetHash160() const; // hash of the data part
   std::string GetHash160Hex() const { uint160 hash = GetHash160(); return HexStr(hash.begin(),hash.end()); } 
   bool Verify(std::vector<std::pair<CAlias,unsigned int> >& result) const;

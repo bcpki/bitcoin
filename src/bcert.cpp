@@ -169,17 +169,34 @@ bool CBitcoinCert::GetStatic(CBitcoinAddress& addr) const {
 }
 
 bool CBitcoinCert::GetP2CSingle(CPubKey& pubkey) const {
-  bool fFound = false;
   for (int i = 0; i < cert.data().paymentkeys_size(); i++) {
     bcert::BitcoinCertData_PublicKey key = cert.data().paymentkeys(i);
     if (key.algorithm().type() == bcert::BitcoinCertData_PublicKey_Algorithm_Type_P2CSINGLE) {
       string str = key.value(0);
       vector<unsigned char> vch(str.begin(),str.end());
       pubkey = CPubKey(vch); 
-      fFound = true;
+      return true;
     }
   }
-  return fFound;
+  return false;
+}
+
+bool CBitcoinCert::GetP2CMulti(unsigned int& nReq, vector<CPubKey>& pubkey) const {
+  for (int i = 0; i < cert.data().paymentkeys_size(); i++) {
+    bcert::BitcoinCertData_PublicKey key = cert.data().paymentkeys(i);
+    if (key.algorithm().type() == bcert::BitcoinCertData_PublicKey_Algorithm_Type_P2CMULTI) {
+      stringstream convert(key.value(0));
+      if (!(convert >> nReq))
+	continue;
+      for(int i=1; i<key.value_size(); i++) {
+	string str = key.value(i);
+	vector<unsigned char> vch(str.begin(),str.end());
+	pubkey.push_back(CPubKey(vch)); 
+      }
+      return true;
+    }
+  }
+  return false;
 }
 
 uint160 CBitcoinCert::GetHash160() const {
@@ -230,7 +247,7 @@ void CBitcoinCert::AddSignature(const CAlias alias) {
   bcert::BitcoinCertSignature* sig = cert.add_signatures();
   sig->set_value(alias.GetName());
   sig->mutable_algorithm()->set_type(bcert::BitcoinCertSignature_SignatureAlgorithm_SignatureAlgorithmType_BCPKI);
-  sig->mutable_algorithm()->set_version(string("0.3"));
+  sig->mutable_algorithm()->set_version(string(BCPKI_SIGVERSION));
   signees.push_back(alias);
 }
 
