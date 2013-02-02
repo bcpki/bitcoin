@@ -50,6 +50,7 @@ message BitcoinCertData {
         BTCPKISINGLE = 1;
         BTCPKIMULTI = 2;
         BTCPKISCRIPT = 3;
+	STATIC_BTCADDR = 4;
         PKCS1 = 100;
       }
       required Type type = 1;

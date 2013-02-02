@@ -1,38 +1,296 @@
-# check if foo already has its signatures in the blockchain (bclist=blockchainlist)
-@onlinemachine: ./bitcoind -testnet bclist foo
+TUTORIAL
+
+I. First simple example (only one machine, running online)
+
+To check if alias "foo1" already has its signatures in the blockchain
+we use the RPC "bclist" (means blockchainlist):
+
+  @onlinemachine: ./bitcoind -testnet bclist foo1
+  {
+      "fRegistered" : false
+  }
+
+This means that "foo1" is not yet registered in the blockchain. We now
+build a BTCPKI-style certificate that can later be signed by the alias
+"foo1" within the blockchain. We first generate a payment address to
+be written into the cert:
+
+  @onlinemachine: ./bitcoind -testnet getnewaddress
+  mrMyF68x19kAc2byGKqR9MLfdAe1t5MPzh
+
+We then create the cert using the script mycert.py, entering the above
+payment address:
+# TODO make mycert.py interactive, i just entered everything in the
+#      script itself, or make a YAML interpreter (better, right?)
+
+  @onlinemachine: mycert.py
+  version: "0.3"
+  data {
+    version: "0.3"
+    subjectname: "Foo Inc."
+    contacts {
+      type: EMAIL
+      value: "foo@fooinc.com"
+    }
+    contacts {
+      type: URL
+      value: "http://www.fooinc.com"
+    }
+    paymentkeys {
+      usage: PAYMENT
+      algorithm {
+        type: STATIC_BTCADDR
+        version: "0.3"
+      }
+      value: "mrMyF68x19kAc2byGKqR9MLfdAe1t5MPzh"
+    }
+  }
+  signatures {
+    algorithm {
+      type: BTCPKI
+      version: "0.3"
+    }
+    value: "foo1"
+  }
+  
+  binary cert written to: 62501937cb578cbba4b1a81fe14cccd7eacec9e3.bcrt
+  ascii cert written to: 62501937cb578cbba4b1a81fe14cccd7eacec9e3.acrt
+  binary data part written to: my.data
+  hash of data part is: 122a9ee74a75b8490350dc406b05a88b0a010834
+
+We move the .bcrt to the local "bcerts" directory where bitcoind will
+find it:
+
+  @onlinemachine: mv 62501937cb578cbba4b1a81fe14cccd7eacec9e3.bcrt ~/.bitcoin/testnet3/bcerts
+
+We can let bitcoind sign any certificate that is stored in
+.bitcoin/testnet3/bcert using the RPC bcsign (means blockchainsign):
+
+  @onlinemachine: ./bitcoind -testnet bcsigncert foo1
+  {
+      "nFee" : 0.00050000,
+      "txid" : "f996c23796b771e244ed9e7e240f84c325161309acbe0615a9fb3537ecd9011b"
+  }
+
+After the transaction gets mined we can verify this signature within
+the blockchain.  While we wait for a confirmation lets take the time
+to look at some other information that bitcoind has stored.
+
+  @onlinemachine: ./bitcoind -testnet aliasdump foo1
+  {
+      "normalized" : "v0.3_F01",
+      "bcvalue" : "28e4898c7041ed937c17110806024528ad103afe000000000000000000000000",
+      "pubkey" : "021f5e6d618cf1beb74c79f42b0aae796094b3112bbe003209a2c1f757f1215bfd",
+      "id" : "62501937cb578cbba4b1a81fe14cccd7eacec9e3",
+      "addr" : "mpUnUCHAdfyTCRgQ56UMh8K8tmtx2Vr9GH",
+      "owner account" : "v0.3_F01_OWNER"
+  }
+
+Explanation:
+- normalized is the alias name after normalization (uppercase, etc.)
+  prepended by a version number
+- bcvalue is the Hash160 of normalized
+- pubkey is the curve point bcvalue*G where G is the base point and
+  bcvalue is interpreted as a little-endian number
+- id is the Hash160 of pubkey
+- addr is id base58-encoded into a bitcoin address
+- owner_account is an account created in our wallet thats holds the
+  keys necessary for revocation of the signature (called the "owners"
+  of "foo1")
+Note that the file name that mycert.py created was in fact id.bcrt. We
+check what owners bcsign has created for us:
+
+  @onlinemachine: ./bitcoind -testnet getaddressesbyaccount v0.3_F01_OWNER
+  [
+      "mixuBTFxEhMPCtBvQnLik9BVzKkMZu37S8"
+  ]
+
+We look at further information that bcsign has stored in our wallet
+along with the committed transaction:
+
+  @onlinemachine: ./bitcoind -testnet getaddressesbyaccount v0.3_F01_OWNER
+  {
+      [...]
+      "BTCPKI" : "v0.3",
+      "bcvalues" : "28e4898c7041ed937c17110806024528ad103afe000000000000000000000000 122a9ee74a75b8490350dc406b05a88b0a010834000000000000000000000000 ",
+      "owners" : "03c6b20d5da48e0db680326671d315ee4e3e28c718c9fc689ad89e0cbff82255ad ",
+      "signature" : "foo1",
+      [...]
+  }
+
+We see that this transaction was meant for a signature of "foo1" in
+version "v0.3". Under "bcvalues" we see two values that were signed,
+one we recognize as the bcvalue of "foo1" (see aliasdump above) and
+the other as the hash of the data part of our certificate (see
+mycert.py above).  Under "owners" we see the pubkey that belongs to
+the address mixuBTFxEhMPCtBvQnLik9BVzKkMZu37S8 (see
+getaddressesbyaccount above). (You can check this with an address
+calculator..) Note that the two bcvalues are the private keys to
+pubkeys that appear in the actual transaction (use getrawtransaction
+and decoderawtransaction to check this, if you want). These two values
+are needed later to revoke the signature by redeeming the outputs.
+
+When the transactions got confirmed we can verify the signature.  The
+RPC bcverify (means blockchainverify) lets bitcoind verify any cert
+that is stored under .bitcoin/testnet3/bcerts:
+
+  @onlinemachine: ./bitcoind -testnet bcverify foo1
+  {
+      "fSigned" : true,
+      "txid" : "f996c23796b771e244ed9e7e240f84c325161309acbe0615a9fb3537ecd9011b",
+      "confirmations" : 1,
+      "strTime" : "2013-01-26T13:08:03"
+  }
+
+Now we wish to send funds directly to a certificate which is stored under .bitcoin/testnet3/bcerts.
+The RPC sendtoalias looks up that cert, verifies it, extracts the address, and sends the funds there:
+
+  @onlinemachine: ./bitcoind -testnet sendtoalias foo1 1
+  {
+      "nConfirmations" : 4,
+      "static" : "mrMyF68x19kAc2byGKqR9MLfdAe1t5MPzh",
+      "txid" : "2161bf7d870e5395b56c7aa8628ecf08e4c9a5ccc4859c5558da9b30bc04b9a2"
+  }
+
+Note that mrMyF68x19kAc2byGKqR9MLfdAe1t5MPzh is indeed the pubkey that
+we placed in the certificate earlier as a static bitcoin address. This
+tells that at the time of sending the blockchain signature on foo1's
+certificate had 4 confirmations. The transactions gets labelled in our
+wallet like this:
+
+@offlinemachine: ./bitcoind -testnet gettransaction 2161bf7d870e5395b56c7aa8628ecf08e4c9a5ccc4859c5558da9b30bc04b9a2
 {
-    "alias" : {
-        "normalized" : "v0.3_F0",
-        "pubkeyhash" : "4fc94e6497ebcf00847d9db84270ee3065d02242"
-    },
-    "fRegistered" : false
+    [...]
+    "to" : "v0.3_F01<static> = mrMyF68x19kAc2byGKqR9MLfdAe1t5MPzh",
+    [...]
 }
 
-# create a new owner (=revocation key) for foo
-@onlinemachine: ./bitcoind -testnet aliasnew foo owner 
+hanke@capella:~/opt/bitcoin/src$ ./bitcoind -testnet addmultisigaddress 2 '["021f5e6d618cf1beb74c79f42b0aae796094b3112bbe003209a2c1f757f1215bfd","mixuBTFxEhMPCtBvQnLik9BVzKkMZu37S8"]' foo1_revoke
+2N2uG7vML3ZUoAbZayBJBsRZ1WmnfogPTua
+
+mryVeV87pAhVTUNYQWD7EXDHRNBozjtxMh
+foo2 owner:
+0310cb4d2411e5366e515be9515e1bb980266ab24e1e139ce22d2df4159bf8d889` = n4o4XTAoGGLMPnqcfPiebbxZrv34aT6hrF
+foo2 alias:
+039c59eb869dc763ce2654f1ca7c259bc33d698561fad4c69385929f0e09318b94 = mgU2CmEjc3edEkuYd7wCxcZP1SQ8der5eA
+
+online "certificate creator" at btcrypt.org:
+
+@onlinemachine: wget -O - "http://btcrypt.org/cgi-bin/set.cgi?alias=foo1&subject=Foo+inc.&email=contact@foo.com&url=http%3a%2f%2ffoo.com&addr=mrMyF68x19kAc2byGKqR9MLfdAe1t5MPzh"
+
+# TODO accept 'addr' field and turn it into a payment key of type STATIC_BTCADDR
+# i just created the cert with a modified mycert.py 
+
+This lets btcrypt.org create a certificate with the given fields and
+store it under a unique filename that is derived from the alias "foo1".
+This filename can be seen inside the wget output:
+62501937cb578cbba4b1a81fe14cccd7eacec9e3.bcrt for the binary version,
+62501937cb578cbba4b1a81fe14cccd7eacec9e3.acrt for the ascii version.
+Alternatively, we can determine this filename ourselves using the RPC "aliasdump":
+
+@onlinemachine: ./bitcoind -testnet aliasdump foo1
+{
+    "normalized" : "v0.3_F01",
+    "bcvalue" : "28e4898c7041ed937c17110806024528ad103afe000000000000000000000000",
+    "pubkey" : "021f5e6d618cf1beb74c79f42b0aae796094b3112bbe003209a2c1f757f1215bfd",
+    "id" : "62501937cb578cbba4b1a81fe14cccd7eacec9e3",
+    "addr" : "mpUnUCHAdfyTCRgQ56UMh8K8tmtx2Vr9GH"
+}
+
+The filename is found under "id", the rest can be ignored. We now
+download the binary version of the certificate into the local "bcerts"
+directory where bitcoind will find it:
+
+@onlinemachine: wget -P ~/.bitcoin/testnet3/bcerts "http://btcrypt.org/certs/4fc94e6497ebcf00847d9db84270ee3065d02242.bcrt"
+
+TODO view YAML representation of it to double-check
+
+
+II. Second example (two machines, one online, one offline)
+
+
+@onlinemachine: ./bitcoind -testnet aliasdump foo0
+{
+    "normalized" : "v0.3_F0",
+    "bcvalue" : "c92b15d71cfe6be16cde86f370a13082a972afc1000000000000000000000000",
+    "pubkey" : "0271790dbbce7f55c082ea2ded34fd978b585df2beffe035d632a2507134e2bf4a",
+    "id" : "4fc94e6497ebcf00847d9db84270ee3065d02242",
+    "addr" : "mnnpqD9Fs4eH1tGzE4r2XXzmcRd2ALFwwx"
+}
+
+@onlinemachine: 
+
+#2. check if we already have a base key (for pay-to-contract) for foo in our wallet
+@offlinemachine: ./bitcoind -testnet aliasget foo0 base
 [
-    "02917b8cdd44925b88ef6f3e63667d408928daab18ebc9bfd350290723a28a3739"
 ]
 
-# double-check if owner is in the proper account
-@onlinemachine: ./bitcoind -testnet aliasget foo owner 
-[
-    "02917b8cdd44925b88ef6f3e63667d408928daab18ebc9bfd350290723a28a3739"
-]
-
-# create P2C base key -> account normalized_BASE, derived ones are normalized_DERIVED or normalized<ticket> 
-@onlinemachine: ./bitcoind -testnet aliasnew foo base 
+#3. create such a base key
+@offlinemachine: ./bitcoind -testnet aliasnew foo0 base
 [
     "03dd14ca69d3046aa821fe2cbc61b821c40928f54947e07661762326a273f4a56b"
 ]
 
-# double-check if owner is in the proper account
-@onlinemachine: ./bitcoind -testnet aliasget foo owner 
-[
-    "03dd14ca69d3046aa821fe2cbc61b821c40928f54947e07661762326a273f4a56b"
-]
+#4. make a cert including the base keys (one pubkey should be enough)
+@onlinemachine: wget -O - "http://btcrypt.org/cgi-bin/set.cgi?alias=foo0&subject=Foo+inc.&email=contact@foo.com&url=http%3a%2f%2ffoo.com&pubkey1=03dd14ca69d3046aa821fe2cbc61b821c40928f54947e07661762326a273f4a56b"
 
-# now make cert
+
+#5. download the binary cert into bcerts directory where bitcoind will find it
+@onlinemachine: ./bitcoind -testnet aliasdump foo0
+{
+    "normalized" : "v0.3_F0",
+    "bcvalue" : "c92b15d71cfe6be16cde86f370a13082a972afc1000000000000000000000000",
+    "pubkey" : "0271790dbbce7f55c082ea2ded34fd978b585df2beffe035d632a2507134e2bf4a",
+    "id" : "4fc94e6497ebcf00847d9db84270ee3065d02242",
+    "addr" : "mnnpqD9Fs4eH1tGzE4r2XXzmcRd2ALFwwx"
+}
+
+@onlinemachine: wget -P ~/.bitcoin/testnet3/bcerts "http://btcrypt.org/certs/4fc94e6497ebcf00847d9db84270ee3065d02242.bcrt"
+
+
+#7. let bitcoind sign the cert (requires the cert in .bitcoin/testnet3/bcert) 
+@onlinemachine: ./bitcoind -testnet bcsign '{"alias":"foo0"}'
+{
+    "nFee" : 0.00050000,
+    "txid" : "c6f06ccc0574f7a96413581bc4284b6473b01638a595117bea5d71db1c5d41e8"
+}
+
+
+#7.(variant): create owner (=revocation key) on offline machine first, then sign on online machine:
+@offlinemachine: ./bitcoind -testnet aliasget foo0 owner 
+[
+]
+@offlinemachine: ./bitcoind -testnet aliasnew foo0 owner 
+[
+    "02917b8cdd44925b88ef6f3e63667d408928daab18ebc9bfd350290723a28a3739"
+]
+@onlinemachine: ./bitcoind -testnet bcsign '{"alias":"foo0","owners":["02917b8cdd44925b88ef6f3e63667d408928daab18ebc9bfd350290723a28a3739"]}'
+{
+    "nFee" : 0.00050000,
+    "txid" : "84fa378b7768e1fff8fd953a76ef7da27acfad495cd815dd46a68cd5dbddf2ee"
+}
+
+#8. let bitcoind verify cert (requires the cert in .bitcoin/testnet3/bcert) 
+@onlinemachine: ./bitcoind -testnet bcverify foo0
+{ 
+    "fSigned" : true,
+    "txid" : "c6f06ccc0574f7a96413581bc4284b6473b01638a595117bea5d71db1c5d41e8",
+    "confirmations" : 2,
+    "strTime" : "2013-01-25T16:59:52"
+}
+
+#9. let bitcoind list all signed values of foo0
+@onlinemachine: ./bitcoind -testnet bclist foo0
+{
+    "fRegistered" : true,
+    "txid" : "c6f06ccc0574f7a96413581bc4284b6473b01638a595117bea5d71db1c5d41e8",
+    "confirmations" : 3,
+    "strTime" : "2013-01-25T16:59:52",
+    "value" : "4fc94e6497ebcf00847d9db84270ee3065d02242",
+    "value" : "11a36815871761a77867bb9e84c7394de2226016"
+}
+
+#10. TODO pay to derived key of base key (pay-to-contract)
 
 =====
 

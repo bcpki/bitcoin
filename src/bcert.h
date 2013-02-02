@@ -21,6 +21,7 @@ class BitcoinCert {
   bool IsSigneeMatch() const { return fSigneeMatch; };
   bool GetSignee(std::string &name) const;
   uint160 GetHash160() const; // hash of the data part
+  bool Verify(unsigned int&  confirmations) const;
   json_spirit::Object ToJSON() const;
 };
 

@@ -1005,9 +1005,9 @@ static void ApproximateBestSubset(vector<pair<int64, pair<const CWalletTx*,unsig
 }
 
 bool CWallet::SelectCoinsMinConf(int64 nTargetValue, int nConfMine, int nConfTheirs, vector<COutput> vCoins,
-                                 set<pair<const CWalletTx*,unsigned int> >& setCoinsRet, int64& nValueRet) const
+                                 set<pair<const CWalletTx*,unsigned int> >& setCoinsRet, int64& nValueRet, bool fClear = true ) const // BTCPKI
 {
-    setCoinsRet.clear();
+    if (fClear) setCoinsRet.clear(); // BTCPKI
     nValueRet = 0;
 
     // List of values less than target
@@ -1016,6 +1016,15 @@ bool CWallet::SelectCoinsMinConf(int64 nTargetValue, int nConfMine, int nConfThe
     coinLowestLarger.second.first = NULL;
     vector<pair<int64, pair<const CWalletTx*,unsigned int> > > vValue;
     int64 nTotalLower = 0;
+
+    // BTCPKI begin patch
+    BOOST_FOREACH(const PAIRTYPE(const CWalletTx*,unsigned int) precoin, setCoinsRet) {
+      nValueRet += precoin.first->vout[precoin.second].nValue;
+    }
+    if (nValueRet > nTargetValue)
+      return true;
+    nTargetValue -= nValueRet; // remaining target, continue as usual (fClear = true)
+    // end patch
 
     random_shuffle(vCoins.begin(), vCoins.end(), GetRandInt);
 
@@ -1103,6 +1112,7 @@ bool CWallet::SelectCoinsMinConf(int64 nTargetValue, int nConfMine, int nConfThe
     return true;
 }
 
+// BTCPKI
 bool CWallet::SelectCoins(int64 nTargetValue, set<pair<const CWalletTx*,unsigned int> >& setCoinsRet, int64& nValueRet) const
 {
     vector<COutput> vCoins;
@@ -1116,7 +1126,7 @@ bool CWallet::SelectCoins(int64 nTargetValue, set<pair<const CWalletTx*,unsigned
 
 
 
-bool CWallet::CreateTransaction(const vector<pair<CScript, int64> >& vecSend, CWalletTx& wtxNew, CReserveKey& reservekey, int64& nFeeRet)
+bool CWallet::CreateTransaction(const vector<pair<CScript, int64> >& vecSend, CWalletTx& wtxNew, CReserveKey& reservekey, int64& nFeeRet, const vector<COutPoint>& vecSpend)
 {
     int64 nValue = 0;
     BOOST_FOREACH (const PAIRTYPE(CScript, int64)& s, vecSend)
@@ -1125,7 +1135,8 @@ bool CWallet::CreateTransaction(const vector<pair<CScript, int64> >& vecSend, CW
             return false;
         nValue += s.second;
     }
-    if (vecSend.empty() || nValue < 0)
+    // BTCPKI
+    if ((vecSend.empty() && vecSpend.empty()) || nValue < 0)
         return false;
 
     wtxNew.BindWallet(this);
@@ -1149,6 +1160,14 @@ bool CWallet::CreateTransaction(const vector<pair<CScript, int64> >& vecSend, CW
                 // Choose coins to use
                 set<pair<const CWalletTx*,unsigned int> > setCoins;
                 int64 nValueIn = 0;
+		// BTCPKI begin patch
+		// vecSpend first
+		BOOST_FOREACH(const COutPoint outp, vecSpend) {
+		  CWalletTx* wtx = &(mapWallet[outp.hash]);
+		  pair<const CWalletTx*,unsigned int> coin = make_pair(wtx,outp.n);
+		  setCoinsRet.insert(coin);
+		}
+		// end patch
                 if (!SelectCoins(nTotalValue, setCoins, nValueIn))
                     return false;
                 BOOST_FOREACH(PAIRTYPE(const CWalletTx*, unsigned int) pcoin, setCoins)
@@ -1188,6 +1207,7 @@ bool CWallet::CreateTransaction(const vector<pair<CScript, int64> >& vecSend, CW
                     scriptChange.SetDestination(vchPubKey.GetID());
 
                     // Insert change txn at random position:
+		    // BTCPKI does this work with empty vout?
                     vector<CTxOut>::iterator position = wtxNew.vout.begin()+GetRandInt(wtxNew.vout.size());
                     wtxNew.vout.insert(position, CTxOut(nChange, scriptChange));
                 }
@@ -1237,6 +1257,15 @@ bool CWallet::CreateTransaction(CScript scriptPubKey, int64 nValue, CWalletTx& w
     vecSend.push_back(make_pair(scriptPubKey, nValue));
     return CreateTransaction(vecSend, wtxNew, reservekey, nFeeRet);
 }
+
+  /*
+bool CWallet::CreateTransaction(COutpoint outp, int64 nValue, CWalletTx& wtxNew, CReserveKey& reservekey, int64& nFeeRet)
+{
+    vector< pair<CScript, int64> > vecSend;
+    vecSend.push_back(make_pair(scriptPubKey, nValue));
+    return CreateTransaction(vecSend, wtxNew, reservekey, nFeeRet);
+}
+  */
 
 // Call after CreateTransaction unless you want to abort
 bool CWallet::CommitTransaction(CWalletTx& wtxNew, CReserveKey& reservekey)
@@ -1803,4 +1832,3 @@ void CWallet::ListLockedCoins(std::vector<COutPoint>& vOutpts)
         vOutpts.push_back(outpt);
     }
 }
-
