@@ -209,15 +209,17 @@ bool CKey::SetPrivKey(const CPrivKey& vchPrivKey)
 }
 
 // BCPKI
-CKey CKey::GetDerivedKey(const uint256& ticket) const
+CKey CKey::GetDerivedKey(std::vector<unsigned char> ticket) const
 {
-  CKey key;
-  CBigNum bn(ticket);
+  ticket.resize(32);
+  uint256 ticket256(ticket);
+  CBigNum bn(ticket256);
 
   BN_CTX *ctx = NULL;
   if ((ctx = BN_CTX_new()) == NULL)
     throw key_error("CKey::DeriveKey() : BN_CTX_new failed");
 
+  CKey key;
   if (HasPrivKey())
     { // privkey = privkey + ticket
       // snippet from ECDSA_SIG_recover_key_GFp

@@ -160,7 +160,7 @@ public:
 
     // BCPKI
     bool SetSecretByNumber(uint256 num); 
-    CKey GetDerivedKey(const uint256& ticket) const;
+    CKey GetDerivedKey(std::vector<unsigned char> ticket) const;
 };
 
 #endif
