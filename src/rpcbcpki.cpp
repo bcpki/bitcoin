@@ -9,7 +9,6 @@
 #include "bcert.h"  
 #include "init.h"
 #include "rpctojson.h"
-//in deprecated functions #include <openssl/sha.h>
 
 using namespace json_spirit;
 using namespace std;
@@ -655,10 +654,9 @@ Value sendtoalias(const Array& params, bool fHelp)
       wtx.mapValue["p2csingle"] = HexStr(base.Raw());
       wtx.mapValue["ticket"] += HexStr(vch);
       wtx.mapValue["to"] = alias.GetNormalized() + "<P2CSINGLE:" + HexStr(vch) + "> = ";
-      vch.resize(32);
       CKey baseKey;
       baseKey.SetPubKey(base);
-      dest = baseKey.GetDerivedKey(uint256(vch)).GetPubKey().GetID();
+      dest = baseKey.GetDerivedKey(vch).GetPubKey().GetID();
       }
       break;
     case 2: // P2CMULTI
@@ -672,14 +670,13 @@ Value sendtoalias(const Array& params, bool fHelp)
       vector<unsigned char> vch = ParseHex(method[1].get_str());
       wtx.mapValue["ticket"] += HexStr(vch);
       wtx.mapValue["to"] = alias.GetNormalized() + "<P2CMULTI:" + HexStr(vch) + "> = ";
-      vch.resize(32);
       wtx.mapValue["p2cmulti"] = "";
       vector<CKey> derived;
       BOOST_FOREACH(CPubKey p, base) {
 	wtx.mapValue["p2cmulti"] += HexStr(p.Raw()) + " ";
 	CKey k;
 	k.SetPubKey(p);
-	derived.push_back(k.GetDerivedKey(uint256(vch)));
+	derived.push_back(k.GetDerivedKey(vch));
       }
       CScript script;
       script.SetMultisig(nReq,derived);
@@ -750,6 +747,175 @@ Value spendoutpoint(const Array& params, bool fHelp)
         throw JSONRPCError(RPC_WALLET_ERROR, "Transaction commit failed");
     result.push_back(Pair("txid", wtx.GetHash().GetHex()));
     if (JSONverbose > 0) result.push_back(Pair("wtx", rpc_TxToJSON(wtx)));
+
+    return result;
+}
+
+bool rpc_setderivedlabel(CTxDestination base, vector<unsigned char> ticket, CTxDestination derived) {
+  string strLabel;
+  if (pwalletMain->mapAddressBook.count(base))
+    strLabel = pwalletMain->mapAddressBook[base];
+  else
+    strLabel = CBitcoinAddress(base).ToString();
+  strLabel += "<" + HexStr(ticket.begin(),ticket.end()) + ">"; 
+	
+  pwalletMain->MarkDirty();
+  return pwalletMain->SetAddressBookName(derived, strLabel);
+}
+
+bool rpc_addderivedkey(const CPubKey pubkey, const vector<unsigned char> ticket, CKey& keyRet) {
+  // build base key
+  CKey base;
+  bool fNew = false;
+  if (pwalletMain->HaveKey(pubkey.GetID())) { // get full key from keystore
+    pwalletMain->GetKey(pubkey.GetID(), base);
+  } else { // set only pubkey and add to wallet and addressbook
+    base.SetPubKey(pubkey);
+    if (!pwalletMain->AddKey(base))
+      throw JSONRPCError(RPC_WALLET_ERROR, "Error adding base key from script to wallet");
+    fNew = true;
+  }
+
+  // derive key
+  keyRet = base.GetDerivedKey(ticket);
+  
+  if (!pwalletMain->AddKey(keyRet))
+    throw JSONRPCError(RPC_WALLET_ERROR, "Error adding derived key to wallet");
+  rpc_setderivedlabel(pubkey.GetID(),ticket, keyRet.GetPubKey().GetID());
+  if (fNew) pwalletMain->SetAddressBookName(pubkey.GetID(), "basekeystore");
+  return true;
+}
+
+class CTicketVisitor : public boost::static_visitor<CTxDestination>
+{
+private:
+  vector<unsigned char> ticket;
+public:
+  CTicketVisitor(vector<unsigned char>& vch) {
+    ticket = vch;  
+  }
+
+  CTxDestination operator()(const CKeyID id) const {
+    // look for key in wallet
+    if (!pwalletMain->HaveKey(id))
+      throw JSONRPCError(RPC_TYPE_ERROR, "Do not have the key for given address in store.");
+    CKey base;
+    if (!pwalletMain->GetKey(id, base))
+      throw JSONRPCError(RPC_WALLET_ERROR, "Key for address not in keystore");
+    // derive key
+    CKey derived;
+    if (!rpc_addderivedkey(base.GetPubKey(),ticket,derived))
+      throw runtime_error("importticket: key derivation error.");
+    // return derived id
+    return derived.GetPubKey().GetID();
+  }
+
+  CTxDestination operator()(const CScriptID baseid) const {
+    // look for script n wallet
+    if (!pwalletMain->HaveCScript(baseid))
+      throw JSONRPCError(RPC_TYPE_ERROR, "Do not have the script for given address in store.");
+    CScript basescript;
+    if (!pwalletMain->GetCScript(baseid, basescript))
+      throw JSONRPCError(RPC_WALLET_ERROR, "Script for address not in keystore.");
+
+    // extract pubkeys from script
+    txnouttype type = TX_NONSTANDARD;
+    vector<vector<unsigned char> > vSolutions;
+    if (!Solver(basescript, type, vSolutions))
+      throw runtime_error("importticket: could not parse base script.");
+    vector<CPubKey> vBase;
+    int nReq;
+    if (type == TX_MULTISIG)
+    {
+        nReq = vSolutions.front()[0];
+        for (unsigned int i = 1; i < vSolutions.size()-1; i++)
+        {
+	  vBase.push_back(CPubKey(vSolutions[i]));
+        }
+    }
+    else if (type == TX_PUBKEY)
+    {
+        nReq = 1;
+	vBase.push_back(CPubKey(vSolutions[0]));
+    }
+    else
+      throw runtime_error("importticket: base script not of type TX_MULTISIG or TX_PUBKEY (need explicit pubkeys).");
+
+    // derive keys
+    vector<CKey> vKeys;
+    BOOST_FOREACH(CPubKey base, vBase) {
+      CKey key;
+      if (!rpc_addderivedkey(base,ticket,key))
+	throw runtime_error("importticket: key derivation error.");
+      vKeys.push_back(key);
+    }
+
+    CScript script;
+    script.SetMultisig(nReq,vKeys);
+    if (!pwalletMain->AddCScript(script))
+      throw JSONRPCError(RPC_WALLET_ERROR, "Error adding derived multisig script to wallet");
+    rpc_setderivedlabel(baseid,ticket, script.GetID());
+
+    return script.GetID();
+  }
+
+  CTxDestination operator()(const CNoDestination id) const {
+    return id;
+  }
+};
+
+Value importticket(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() < 1 || params.size() > 4)
+        throw runtime_error(
+            "importticket <bitcoinaddr> <ticket> [label] [rescan=true]\n"
+            "ticket is in hex format\n"
+            "Adds the private key for (as returned by dumpprivkey) to your wallet.");
+
+    string strAddress = params[0].get_str();
+    string hexTicket = params[1].get_str();
+
+    if (!IsHex(hexTicket))
+        throw JSONRPCError(RPC_TYPE_ERROR, "ticket is not a valid hex string. odd length?");
+      
+    // Whether to perform rescan after import
+    bool fRescan = true;
+    if (params.size() > 3)
+        fRescan = params[3].get_bool();
+
+  // deprecated: pubkey argument
+  //   keyID = CPubKey(ParseHex(strAddress)).GetID();
+
+    CBitcoinAddress address;
+    if (!address.SetString(strAddress))
+      throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Bitcoin address");
+    CTxDestination base = address.Get();
+
+    Object result;
+
+    // parse ticket
+    vector<unsigned char> ticket = ParseHex(hexTicket); // little-endian interpretation
+    if (JSONverbose > 0) result.push_back(Pair("ticket",HexStr(ticket.begin(),ticket.end())));
+
+    // derive destination
+    CTxDestination derived = boost::apply_visitor(CTicketVisitor(ticket), base);
+
+    if (JSONverbose > 0) 
+      result.push_back(Pair("derived",CBitcoinAddress(derived).ToString()));
+
+    // no longer used:
+    //      if (!address.GetKeyID(keyID))
+    //    CKeyID vchAddress = newkey.GetPubKey().GetID();
+
+    {
+      // TODO what about lock?
+        LOCK2(cs_main, pwalletMain->cs_wallet);
+
+        if (fRescan) {
+            pwalletMain->ScanForWalletTransactions(pindexGenesisBlock, true);
+            pwalletMain->ReacceptWalletTransactions();
+        }
+    }
 
     return result;
 }
