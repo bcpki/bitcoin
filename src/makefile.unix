@@ -103,7 +103,7 @@ xLDFLAGS=$(LDHARDENING) $(LDFLAGS)
 
 OBJS= \
     obj/rpctojson.o \
-    obj/rpcbtcpki.o \
+    obj/rpcbcpki.o \
     obj/bcert.pb.o \
     obj/alias.o \
     obj/bcert.o \

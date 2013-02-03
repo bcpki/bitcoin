@@ -103,3 +103,17 @@ def derivepubkey(pubkey,hash):
    return point2pubkey(derivepoint(pubkey2point(pubkey),hash))
 def derivepubkeyx(pubkey,hash):
    return tohex(point2pubkey(derivepoint(pubkey2point(pubkey),hash)))
+
+# secret
+def sec2point(sec):
+  return int(tohex(sec),16)*G;
+def sec2pubkey(sec):
+  return point2pubkey(sec2point(sec));
+def sec2pubkeyx(sec):
+  return point2pubkeyx(sec2point(sec));
+def sec2id(sec):
+  return point2id(sec2point(sec));
+def sec2idx(sec):
+  return point2idx(sec2point(sec));
+def sec2addr(sec):
+  return point2addr(sec2point(sec));
