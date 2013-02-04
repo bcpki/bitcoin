@@ -34,6 +34,7 @@ make -f makefile.unix
 
 don't access blockchain:
 - aliasdump : output all values associated with an alias name (normalization,hash,privkey,address,etc.)
+- importticket : import derived keys from a given base address and a given ticket number (pay-to-contract)
 
 access blockchain:
 - bcverify : verify arbitrary signatures for a given alias, in particular verify certificates
@@ -45,7 +46,6 @@ commit transaction:
 - sendtoalias : send money directly to alias (certificate must be available locally)
     this can handle various methods such as static bitcoin address, pay-to-contract with single or multiple basekeys. 
 - spendoutpoint : spends a given outpoint (txid,vout) to a self-owned address 
-- importticket : import derived keys from a given base address and a given ticket number
 
 ### extended use (does not appear in wiki examples)
 - bcsign : sign given values under a given alias name 
@@ -78,8 +78,8 @@ TODO:
   - bcert.o
   - alias.o
   - bcert.pb.o
-  - rpctojson.o \
-  - rpcbcpki.o \
+  - rpctojson.o 
+  - rpcbcpki.o 
  added libs 
   - protobuf
 
@@ -114,5 +114,5 @@ TODO:
 
 ## Useful Links
 
-http://www.fileformat.info/tool/hash.htm
-http://gobittest.appspot.com/Address
+ - http://www.fileformat.info/tool/hash.htm
+ - http://gobittest.appspot.com/Address
