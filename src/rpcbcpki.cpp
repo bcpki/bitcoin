@@ -696,8 +696,7 @@ Value sendtoalias(const Array& params, bool fHelp)
     // compile output
     Object result;
     if (JSONverbose > 0) result.push_back(Pair("nConfirmations",nConfirmations));
-    // TODO CTxDestination -> string?
-    //    result.push_back(Pair("dest",address.ToString()));
+    result.push_back(Pair("dest",CBitcoinAddress(dest).ToString()));
     result.push_back(Pair("txid", wtx.GetHash().GetHex()));
 
     return result;
@@ -767,22 +766,32 @@ bool rpc_addderivedkey(const CPubKey pubkey, const vector<unsigned char> ticket,
   // build base key
   CKey base;
   bool fNew = false;
+
+  // DEBUG
+  // if (!pwalletMain->HaveKey(pubkey.GetID())) 
+  // throw runtime_error("rpc_addderivedkey: do not have pubkey:"+HexStr(pubkey.Raw()));
+
   if (pwalletMain->HaveKey(pubkey.GetID())) { // get full key from keystore
-    pwalletMain->GetKey(pubkey.GetID(), base);
+    if (!pwalletMain->GetKey(pubkey.GetID(), base))
+      throw runtime_error("rpc_addderivedkey: GetKey failed.");
   } else { // set only pubkey and add to wallet and addressbook
     base.SetPubKey(pubkey);
-    if (!pwalletMain->AddKey(base))
-      throw JSONRPCError(RPC_WALLET_ERROR, "Error adding base key from script to wallet");
+    //    if (!pwalletMain->AddKey(base))
+    // throw JSONRPCError(RPC_WALLET_ERROR, "Error adding base key from script to wallet");
     fNew = true;
   }
 
   // derive key
   keyRet = base.GetDerivedKey(ticket);
   
-  if (!pwalletMain->AddKey(keyRet))
-    throw JSONRPCError(RPC_WALLET_ERROR, "Error adding derived key to wallet");
+  if (fNew)
+    pwalletMain->SetAddressBookName(pubkey.GetID(), "basekeystore");
+  else {
+    if (!pwalletMain->HaveKey(keyRet.GetPubKey().GetID())) 
+      if (!pwalletMain->AddKey(keyRet)) // CAUTION: AddKey cannot add pure pubkeys?
+	throw JSONRPCError(RPC_WALLET_ERROR, "Error adding derived key to wallet");
+  }
   rpc_setderivedlabel(pubkey.GetID(),ticket, keyRet.GetPubKey().GetID());
-  if (fNew) pwalletMain->SetAddressBookName(pubkey.GetID(), "basekeystore");
   return true;
 }
 
@@ -844,6 +853,7 @@ public:
     // derive keys
     vector<CKey> vKeys;
     BOOST_FOREACH(CPubKey base, vBase) {
+      assert("hi");
       CKey key;
       if (!rpc_addderivedkey(base,ticket,key))
 	throw runtime_error("importticket: key derivation error.");
