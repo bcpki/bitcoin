@@ -258,10 +258,8 @@ static const CRPCCommand vRPCCommands[] =
     { "gettxout",               &gettxout,               true,   false },
     { "lockunspent",            &lockunspent,            false,  false },
     { "listlockunspent",        &listlockunspent,        false,  false },
-// BCPKI TODO unlocked? why is createmultisig unlocked?
-    { "aliasget",               &aliasget,               false,  false },
+// BCPKI 
     { "aliasdump",              &aliasdump,              false,  false },
-    { "aliasnew",               &aliasnew,               false,  false },
     { "bclist",                 &bclist,                 false,  false },
     { "bcsign",                 &bcsign,                 false,  false },
     { "bcsigncert",             &bcsigncert,             false,  false },
@@ -269,6 +267,8 @@ static const CRPCCommand vRPCCommands[] =
     { "sendtoalias",            &sendtoalias,            false,  false },
     { "spendoutpoint",          &spendoutpoint,          false,  false },
     { "importticket",           &importticket,           false,  false },
+    //{ "aliasget",               &aliasget,               false,  false },
+    //{ "aliasnew",               &aliasnew,               false,  false },
 };
 
 CRPCTable::CRPCTable()
@@ -1237,7 +1237,6 @@ Array RPCConvertValues(const std::string &strMethod, const std::vector<std::stri
 //BCPKI
     if (strMethod == "getnewaddress"          && n > 1) ConvertTo<bool>(params[1]);
     if (strMethod == "dumpprivkey"            && n > 1) ConvertTo<bool>(params[1]);
-    if (strMethod == "aliasnew"               && n > 2) ConvertTo<int>(params[2]);
     if (strMethod == "bcsign"                 && n > 0) ConvertTo<Object>(params[0]);
     if (strMethod == "bcsign"                 && n > 1) ConvertTo<Array>(params[1]);
     if (strMethod == "sendtoalias"            && n > 2) ConvertTo<Array>(params[1]); // method
@@ -1245,6 +1244,7 @@ Array RPCConvertValues(const std::string &strMethod, const std::vector<std::stri
     if (strMethod == "sendtoalias"            && n > 3) ConvertTo<int>(params[3]); // minconf
     if (strMethod == "spendoutpoint"          && n > 1) ConvertTo<int>(params[1]);
     if (strMethod == "importticket"           && n > 3) ConvertTo<bool>(params[3]);
+    //if (strMethod == "aliasnew"               && n > 2) ConvertTo<int>(params[2]);
 
     return params;
 }

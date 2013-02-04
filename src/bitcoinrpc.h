@@ -195,8 +195,6 @@ extern json_spirit::Value getblock(const json_spirit::Array& params, bool fHelp)
 extern json_spirit::Value gettxoutsetinfo(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value gettxout(const json_spirit::Array& params, bool fHelp);
 // BCPKI
-extern json_spirit::Value aliasget(const json_spirit::Array& params, bool fHelp);
-extern json_spirit::Value aliasnew(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value aliasdump(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value bclist(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value bcsign(const json_spirit::Array& params, bool fHelp);
@@ -205,5 +203,7 @@ extern json_spirit::Value bcverify(const json_spirit::Array& params, bool fHelp)
 extern json_spirit::Value sendtoalias(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value spendoutpoint(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value importticket(const json_spirit::Array& params, bool fHelp);
+//extern json_spirit::Value aliasget(const json_spirit::Array& params, bool fHelp);
+//extern json_spirit::Value aliasnew(const json_spirit::Array& params, bool fHelp);
 
 #endif
