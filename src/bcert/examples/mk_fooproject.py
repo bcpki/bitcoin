@@ -26,7 +26,7 @@ paykey.algorithm.type = paykey.algorithm.P2CMULTI # is default anyway
 paykey.algorithm.version = '0.1'
 paykey.value.append("2")
 paykey.value.append("0285b2eb2c0f2e4a12646dbcf38d08c29ef557b5616048575b133a2084a56bb84a".decode('hex'))
-paykey.value.append("039b9a144f2b0ada99ebf340606aa9ecd2e444a0502e9ec308da878eafc6ed5aa2".decode('hex'))
+paykey.value.append("03ba3137ddbee4e164390b7b67e0975d12969ef23ac1fd7b1f7e880319d072b323".decode('hex'))
 
 # this is standard in bitcoin ripemd(sha256())
 from bitcoin import hash_160
