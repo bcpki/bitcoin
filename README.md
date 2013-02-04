@@ -78,8 +78,8 @@ TODO:
   - bcert.o
   - alias.o
   - bcert.pb.o
-  - rpctojson.o \
-  - rpcbcpki.o \
+  - rpctojson.o 
+  - rpcbcpki.o 
  added libs 
   - protobuf
 
@@ -114,5 +114,5 @@ TODO:
 
 ## Useful Links
 
-http://www.fileformat.info/tool/hash.htm
-http://gobittest.appspot.com/Address
+ - http://www.fileformat.info/tool/hash.htm
+ - http://gobittest.appspot.com/Address
