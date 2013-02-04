@@ -1,5 +1,5 @@
-version: 0.1 # version of corresponding bcert.proto specification
 data:
+  version: 0.1 # version of corresponding bcert.proto specification
   subjectname: # put descriptive long name here
   contacts: 
    - type: EMAIL  
