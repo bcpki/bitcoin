@@ -10,8 +10,6 @@
 #include "bitcoinrpc.h"
 #include "init.h"
 #include "base58.h"
-#include "alias.h"
-#include "bcert.h"
 #include "rpctojson.h"
 
 using namespace std;

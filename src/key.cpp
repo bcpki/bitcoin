@@ -9,7 +9,7 @@
 
 #include "key.h"
 // BCPKI
-#include "bignum.h"
+#include "bignum.h" // for uint256 -> CBigNum
 
 // Generate a private key from just the secret parameter
 int EC_KEY_regenerate_key(EC_KEY *eckey, BIGNUM *priv_key)

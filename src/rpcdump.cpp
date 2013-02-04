@@ -6,7 +6,6 @@
 #include "bitcoinrpc.h"
 #include "ui_interface.h"
 #include "base58.h"
-#include "alias.h" // KeyToJSON
 
 #include <boost/lexical_cast.hpp>
 

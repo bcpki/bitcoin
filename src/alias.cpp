@@ -1,4 +1,8 @@
-//#include <locale>
+// Copyright (c) 2010 Satoshi Nakamoto
+// Copyright (c) 2009-2012 The Bitcoin developers
+// Distributed under the MIT/X11 software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
 #include "alias.h"
 #include "util.h" // ParseHex
 #include "hash.h" // Hash
@@ -11,24 +15,6 @@ using namespace std;
 using namespace json_spirit;
 
 /* CBcValue */
-
-/* deprecated
-void CBcValue::init_uint256(const uint256 val) {
-  value = val;
-  key.SetSecretByNumber(val);
-  keyID = key.GetPubKey().GetID();
-  fSet = true;
-}
-
-bool CBcValue::init_vch(vector<unsigned char> vch) {
-  if (vch.size() > 20)
-    return false;
-  vch.resize(20);
-  uint160 value(vch);
-  init_uint160(value); 
-  return fSet;
-}
-*/
 
 bool CBcValue::init() {
   fSet = key.SetSecretByNumber(Get256());
@@ -205,40 +191,10 @@ string CAlias::addressbookname(pubkey_type type) const {
   return "";
 } 
 
-/* deprecated
-bool CAlias::AppearsInScript(const CScript script) const {
-  txnouttype typeRet = TX_NONSTANDARD;
-  vector<vector<unsigned char> > vSolutions;
-  if (!Solver(script, typeRet, vSolutions))
-    return false;
-
-  return ((typeRet == TX_MULTISIG) && (CPubKey(vSolutions[1]) == key.GetPubKey()));
-}
-*/
-
 bool CAlias::IsValidInCoins(const CCoins coins) const {
   std::vector<unsigned int> outs = FindInCoins(coins, (int64) 100*50000, true);
   return (outs.size() > 0);
 }
-
-/* deprecated
-int CAlias::LookupSignatures(vector<CPubKey>& sigs) const {
-  boost::function<bool (const CCoins)> func;
-  boost::function<bool (const CAlias* first, const CCoins)> mem;
-  mem = std::mem_fun(&CAlias::IsValidInCoins);
-  func = std::bind1st(mem, this);
-  uint256 txid;
-  if (!pcoinsTip->GetFirstMatch(func, txid))
-    return -1;
-  CCoins coins;
-  pcoinsTip->GetCoins(txid, coins);
-  sigs.clear();
-  BOOST_FOREACH(const CTxOut &out, coins.vout) {
-    ExtractPubKeysFromMultisig(out.scriptPubKey,sigs); //appends found pubkeys to sigs vector
-  }
-  return coins.nHeight;
-}
-*/
 
 bool CAlias::Lookup(uint256& txidRet) const {
   boost::function<bool (const CCoins)> func;
@@ -270,128 +226,6 @@ Object CAlias::ToJSON() {
   if (JSONverbose > 0) result.push_back(Pair("owner account", addressbookname(OWNER)));
   return result;
 }
-
-/* CRegistrationEntry */
-
-/* deprecated 26.1.13
-CRegistrationEntry::CRegistrationEntry(const CAlias& alias, const CPubKey& owner, const uint256& certhash) {
-  aliasKey = alias.GetKey();
-  ownerKey.SetPubKey(owner);
-
-  fCert = (certhash > 0);
-  fBacked = false;
-  if (fCert)
-    certKey.SetSecretByNumber(certhash);
-}
-
-CScript CRegistrationEntry::GetScript() const {
-  CScript script;
-  vector<CKey> keys;
-  keys.push_back(aliasKey);
-  keys.push_back(ownerKey);
-  if (fCert)
-      keys.push_back(certKey);
-  script.SetMultisig(keys.size(), keys);
-
-  return script;
-};
-*/
-  
-/* deprecated
-bool CRegistrationEntry::SetByScript(const CScript& scriptPubKey) {
-  vector<CPubKey> pubkeys;
-  if (!ExtractPubKeysFromMultisig(scriptPubKey,pubkeys))
-    return false;
-
-  if (pubkeys.size() < 2) 
-    return false;
-  
-  aliasKey.SetPubKey(pubkeys[0]);
-  ownerKey.SetPubKey(pubkeys[1]);
-  if (pubkeys.size() > 2)
-    {
-      fCert = true;
-      certKey.SetPubKey(pubkeys[2]);
-    }
-  else
-    fCert = false;
-  return true;
-}
-*/
-
-/* deprecated 26.1.13
-int64 CRegistrationEntry::GetNValue() const {
-  CCoins coins;
-  pcoinsTip->GetCoins(outpt.hash, coins);
-  return coins.vout[outpt.n].nValue;
-};
-
-Object CRegistrationEntry::ToJSON() const {
-  Object result;
-  result.push_back(Pair("alias", KeyToJSON(aliasKey)));
-  result.push_back(Pair("owner", KeyToJSON(ownerKey)));
-  result.push_back(Pair("fcert", fCert));
-  if (fCert)
-   result.push_back(Pair("cert", KeyToJSON(certKey)));
-  result.push_back(Pair("script", ScriptToJSON(GetScript())));
-
-  // Backed
-  result.push_back(Pair("fbacked", fBacked));
-  if (fBacked)
-    {
-      result.push_back(Pair("outpt", OutPointToJSON(outpt)));
-      result.push_back(Pair("amount",ValueFromAmount(GetNValue())));
-    }
-  return result;
-}
-*/
-
-/* CRegistration */
-
-/* deprecated
-bool CRegistration::Lookup(const CAlias& alias) {
-
-  CCoins coins;
-  fBacked = pcoinsTip->GetFirstMultisigWithPubKey(alias.GetPubKey(),txid,coins,outs);
-  if (!fBacked)
-    return false;
-
-  for (unsigned int i=0; i<outs.size(); i++) {
-    unsigned int nOut = outs[i];
-    CRegistrationEntry entry;
-    if (!entry.SetByScript(coins.vout[nOut].scriptPubKey))
-      throw runtime_error("CRegistration::Lookup: SetByScript failed.");
-    entry.outpt = COutPoint(txid,nOut);
-    entry.fBacked = true;
-    vreg.push_back(entry);
-  };
-  return true;
-};
-*/
-
-/* deprecated 26.1.13
-Object CRegistration::ToJSON() const {
-  Object result;
-  result.push_back(Pair("fBacked", fBacked));
-  if (fBacked)
-    {
-      CCoins coins;
-      pcoinsTip->GetCoins(txid, coins);
-      result.push_back(Pair("txid",txid.ToString()));
-      result.push_back(Pair("coins", CoinsToJSON(coins)));
-      result.push_back(Pair("nEntries", (int)outs.size()));
-    }
-
-  Array entries;
-  BOOST_FOREACH(CRegistrationEntry regentry, vreg)
-  {
-    entries.push_back(regentry.ToJSON());
-  }
-  result.push_back(Pair("entries", entries));
-  
-  return result;
-}
-*/
 
 /* CPubKey */
 

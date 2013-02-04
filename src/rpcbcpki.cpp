@@ -15,14 +15,6 @@ using namespace std;
 using namespace boost;
 using namespace boost::assign; // list_of
 
-// TODO copy here from rpcraw...
-/* do we need this?
-#include <boost/assign/list_of.hpp>
-#include "bitcoinrpc.h"
-#include "base58.h"
-*/
-
-
 // utils
 CPubKey rpc_aliasnew(const CAlias alias, pubkey_type type) {
   CPubKey newKey;
@@ -269,6 +261,7 @@ bool rpc_parsealiasobject(const string argStr, CAlias& alias, unsigned int& nReq
 
 // RPCs alias...
 // do not access blockchain
+/* deprecated
 Value aliasnew(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() < 2 || params.size() > 3)
@@ -308,7 +301,7 @@ Value aliasget(const Array& params, bool fHelp)
     if (fHelp || params.size() != 2)
         throw runtime_error(
             "aliasget <alias> <type>\n"
-            "Returns the list of pubkeys of type owner or base that have generated for the given alias.");
+            "Returns the list of pubkeys of type owner or base that we have generated for the given alias.");
 
     CAlias alias = rpc_buildalias(params[0].get_str());
     pubkey_type type = rpc_buildtype(params[1].get_str());
@@ -332,14 +325,15 @@ Value aliasget(const Array& params, bool fHelp)
     }
     return ret;
 }
+*/
 
 Value aliasdump(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() != 1)
         throw runtime_error(
             "aliasget <alias>\n"
-            "Returns different values associated with alias: the normalized alias, the hash of that (called the \"bcvalue\"), the derived pubkey (bcvalue*basepoint of curve, called the \"pubkey\"), the hash of that pubkey (called the \"id\"), and that hash b58encoded into a bitcoin address (called the \"address\")."
-	    "The id (equivalently, the address) can be calculated from any of the other values, is therefore used as a locator (e.g. database index, filename) for meta-data associated with alias.\n");
+            "Returns different values associated with alias: the normalized alias, the hash of that (called the \"bcvalue\"), the bcvalue b58encoded into a privkey (called the \"privkey\"), the derived pubkey (bcvalue*basepoint of curve, called the \"pubkey\"), the hash of that pubkey (called the \"id\"), and that hash b58encoded into a bitcoin address (called the \"address\")."
+	    "The id (equivalently, the address) can be calculated from any of the other values, and is therefore used as a locator (e.g. database index, filename) for meta-data associated with alias.\n");
 
     string str = params[0].get_str();
     if (IsHex(str)) {
@@ -380,33 +374,8 @@ Value bcverify(const Array& params, bool fHelp)
 	if (!cert.IsSet())
 	  throw runtime_error("cert not found.\n");
 	val = CBcValue(cert.GetHash160());
-	
-	/*
-	string helloStr("hello");
-	std::vector<unsigned char> hello(helloStr.begin(),helloStr.end());
-	result.push_back(Pair("hellohex", HexStr(hello)));
-	result.push_back(Pair("hellohash", Hash(hello.begin(),hello.end()).GetHex()));
-	uint256 hash1;
-	SHA256(&hello[0], hello.size(), (unsigned char*)&hash1);
-	result.push_back(Pair("hellosha", hash1.GetHex()));
-	hash1 = 1;
-	result.push_back(Pair("hello1", hash1.GetHex()));
-	hash1 = 16;
-	result.push_back(Pair("hello16", hash1.GetHex()));
-	hash1 = 256;
-	result.push_back(Pair("hello256", hash1.GetHex()));
-	std::vector<unsigned char> hash2(32,0);
-	SHA256(&hello[0], hello.size(), &hash2[0]);
-	result.push_back(Pair("hash2", HexStr(hash2)));
-	uint256 hash3(hash2);
-	result.push_back(Pair("hash3", hash3.GetHex()));
-	uint256 hash4(HexStr(hash2));
-	result.push_back(Pair("hash4", hash4.GetHex()));
-	*/
       }
 
-    //    CBcValue val(params[1].get_str());
- 
     uint256 txid;
     bool fSigned = alias.VerifySignature(val,txid);
     // TODO should also return the outpoint
@@ -428,7 +397,8 @@ Value bclist(const Array& params, bool fHelp)
     if (fHelp || params.size() > 1 || params.size() < 1)
         throw runtime_error(
             "bclist <alias>\n"
-            "Returns the unique transaction (or none) that contains the (currently) valid signatures of <alias>.\n");
+            "Returns the unique transaction (or none) that contains the (currently) valid signatures of <alias>."
+	    "Also outputs the values that are signed by this transaction.\n");
 
     Object result;
 
@@ -447,27 +417,15 @@ Value bclist(const Array& params, bool fHelp)
     return result;
 }
 
-
 Value bcsign(const Array& params, bool fHelp)
 {
   if (fHelp || params.size() < 1 || params.size() > 2)
     {
       string msg = "bcsign {'alias':alias,'n':nRequired,'owners':owner,...} [{'val':value,'n':nRequired,'owners':owner,...},...]\n"
-	"The first argument is a valid alias name (limited charset, etc)."
-	"The optional second argument (null allowed) is a list of a number n (should be 1 or 2) and (currently) 1 or 2 pubkeys that \"own\" the alias."
-	"At least n of the listed pubkeys are required to revoke the alias."
-	"Null means n=1 and one fresh generated pubkey is chosen from a newly created account in the wallet."
-	"The ownerpubkeys are given in compressed hex format (33bytes)."
-	"An empty hex string (e.g. as in \",02...\" or \"02...,\" or \",\") is replaced by a freshly generated pubkey.\n"
-	"The optional third argument (null allowed) is a list of (arbitrary length) of values in hex format."
-	"The values are interpreted as little-endian numbers and can be up to 32 bytes in length."
-	"Null means that a certificate with the correct filename for alias is looked up in the local certificate store and the hash of its data part is taken as the single vale."
-	"Alternatively, an empty hex string is also replaced by this hash.\n"
-	"Suppose N values are given and m (= 1 or 2) ownerpubkeys."
-	"This call creates and commits a transaction with N+1 explit (i.e. non-P2SH) multi-signature outputs (plus one regular output for change, if applicable)."
-	"Each output has the form: n+1 <value-pubkey> <owner-pubkey> .. m+1 OP_CHECKMULTISIG."
-	"The value-pubkeys are derived from alias, value1, ..., valueN by taking first Hash160 and then multiplying the base point of the curve with that value."
-	"The amounts are chosen automatically (currently 0.05 BTC per output, which is 100 times the transaction fee)\n";
+	"The first argument is either a valid alias name or an object specifying the owners (i.e. the revocation requirements) for the signature. In the first case one single owner is used, coming from the keystore. In the second case every empty string owner is replaced by one from the keystore.\n" 
+	"The second argument is a list of values in hex format (<= 32 bytes)."
+	"The values are interpreted as little-endian numbers.\n"
+	"The amounts are chosen automatically (currently 0.05 BTC per output)\n";
       
       throw runtime_error(msg);
     }
@@ -528,9 +486,10 @@ Value bcsigncert(const Array& params, bool fHelp)
     {
       string msg = "bcsigncert <alias> <hex cert>\n"
 	"bcsigncert '{\"alias\":\"aliasname\",\"n\":nRequired,\"owners\":[\"<pubkey>\",\"<pubkey>\",...]}' <hex cert>\n"
-	"The first argument is either a valid alias name (limited charset, etc) or a quoted JSON object as described."
-	"The second argument is a hex serialized protobuf message containing the certificate.\n";
-//'[{\"<hexvalue>\",\"<hexvalue>\",...}]'\n"
+	"The first argument is either a valid alias name (limited charset, etc) or a quoted JSON object as described (see also bcsign)."
+	"The second argument is a hex serialized protobuf message containing the certificate.\n"
+	"This parses the certificate (i.e. protobuf message), hashes the data part of it, signs this hash under the given alias, adds the new signature to the certificate, and stores this certificate locally."
+	"A lookup is preformed whether the given alias already has a signature in the blockchain, in which case we abort.";
       
       throw runtime_error(msg);
     }
@@ -549,17 +508,6 @@ Value bcsigncert(const Array& params, bool fHelp)
   uint256 txid;
   if (!(JSONverbose > 0) && alias.Lookup(txid))
     throw runtime_error("RPC bcsigncert: valid signature already present in blockchain. not signing again.");
-
-  // backward compatibility (one arg version)
-  /* deprecated
-  if (params.size() == 1) {
-    Array arr;
-    Object obj;
-    obj.push_back(Pair("alias",alias.GetName()));
-    arr.push_back(obj);
-    return bcsign(arr,fHelp);
-  }
-  */
 
   // build cert value
   if (!IsHex(params[1].get_str()))
@@ -603,9 +551,10 @@ Value sendtoalias(const Array& params, bool fHelp)
     if (fHelp || params.size() < 2 || params.size() > 4)
         throw runtime_error(
             "sendtoalias <alias> '[method,values,...]' <amount> [minconf=6]\n"
-	    "a cert for alias is looked up in .bitcoin/testnet3/bcerts, parsed, and verified."
-	    "method is an integer: 4 for static, 1 for pecsingle; further values depend on method."
-	    "if successful then funds are sent to the static bitcoin address contained in that certificate."
+	    "a certificate for alias is looked up in .bitcoin/testnet3/bcerts, parsed, and verified."
+	    "if successful then funds are sent to a destination given in that certificate.\n"
+	    "method is an integer: 4 for STATIC, 1 for P2CSINGLE, 2 for P2CMULTI."
+	    "methods 1 and 2 (P2C) require a value which is taken as the ticket to derive the actual destination from the base that is given in the certificate."
             "<amount> is a real and is rounded to the nearest 0.00000001"
             + HelpRequiringPassphrase());
 
@@ -764,6 +713,8 @@ Value spendoutpoint(const Array& params, bool fHelp)
     return result;
 }
 
+// utils for importticket
+
 bool rpc_setderivedlabel(CTxDestination base, vector<unsigned char> ticket, CTxDestination derived) {
   string strLabel;
   if (pwalletMain->mapAddressBook.count(base))
@@ -894,8 +845,10 @@ Value importticket(const Array& params, bool fHelp)
     if (fHelp || params.size() < 1 || params.size() > 4)
         throw runtime_error(
             "importticket <bitcoinaddr> <ticket> [label] [rescan=true]\n"
-            "ticket is in hex format\n"
-            "Adds the private key for (as returned by dumpprivkey) to your wallet.");
+            "Adds derived keys to the keystore.\n"
+	    "<ticket> is in hex format (<= 32 bytes)."
+	    "<bitcoinaddr> can be a regular address or P2SH." 
+            "This requires that the unhashed bitcoin address is present in the keystore, i.e. all pubkeys must be known.\n");
 
     string strAddress = params[0].get_str();
     string hexTicket = params[1].get_str();
@@ -907,9 +860,6 @@ Value importticket(const Array& params, bool fHelp)
     bool fRescan = true;
     if (params.size() > 3)
         fRescan = params[3].get_bool();
-
-  // deprecated: pubkey argument
-  //   keyID = CPubKey(ParseHex(strAddress)).GetID();
 
     CBitcoinAddress address;
     if (!address.SetString(strAddress))
@@ -928,12 +878,8 @@ Value importticket(const Array& params, bool fHelp)
     if (JSONverbose > 0) 
       result.push_back(Pair("derived",CBitcoinAddress(derived).ToString()));
 
-    // no longer used:
-    //      if (!address.GetKeyID(keyID))
-    //    CKeyID vchAddress = newkey.GetPubKey().GetID();
-
     {
-      // TODO what about lock?
+      // TODO what about lock above?
         LOCK2(cs_main, pwalletMain->cs_wallet);
 
         if (fRescan) {

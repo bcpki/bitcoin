@@ -23,7 +23,6 @@ public:
     bool SetBestBlock(CBlockIndex *pindex);
     bool BatchWrite(const std::map<uint256, CCoins> &mapCoins, CBlockIndex *pindex);
     bool GetStats(CCoinsStats &stats);
-    // deprecated    bool GetFirstMultisigWithPubKey(const CPubKey& searchKey, uint256& txRet, CCoins& coinsRet, std::vector<unsigned int>& outRet);
     bool GetFirstMatch(boost::function<bool (const CCoins)> f, uint256& txRet);
 };
 

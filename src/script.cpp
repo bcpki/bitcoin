@@ -1639,46 +1639,6 @@ bool ExtractDestinations(const CScript& scriptPubKey, txnouttype& typeRet, vecto
     return true;
 }
 
-/* deprecated
-bool IsMultisigWithPubKey(const CScript& scriptPubKey, const CPubKey& searchKey) 
-{
-  txnouttype typeRet = TX_NONSTANDARD;
-  vector<valtype> vSolutions;
-  if (!Solver(scriptPubKey, typeRet, vSolutions))
-    return false;
-
-  return ((typeRet == TX_MULTISIG) && (CPubKey(vSolutions[1]) == searchKey));
-}
-*/
-
-/* deprecated
-bool ExtractPubKeysFromMultisig(const CScript& scriptPubKey, vector<CPubKey>& results) 
-{
-    txnouttype typeRet = TX_NONSTANDARD;
-    vector<valtype> vSolutions;
-    if (!Solver(scriptPubKey, typeRet, vSolutions))
-        return false;
-
-    if ((typeRet != TX_MULTISIG))
-      return false;
-
-    if (vSolutions.front()[0] < 2) // filter out 1-to-redeem
-      return false;
-
-    // deprecated, instead we take only the first pubkey 
-
-    for (unsigned int i = 1; i < vSolutions.size()-1; i++)
-    {
-        CPubKey pubkey(vSolutions[i]);
-        results.push_back(pubkey);
-    }
-    
-    results.push_back(vSolutions[1]);
-
-    return true;
-}
-*/
-
 bool VerifyScript(const CScript& scriptSig, const CScript& scriptPubKey, const CTransaction& txTo, unsigned int nIn,
                   unsigned int flags, int nHashType)
 {
