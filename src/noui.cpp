@@ -24,10 +24,10 @@ static int noui_ThreadSafeMessageBox(const std::string& message, const std::stri
         strCaption += _("Information");
         break;
     default:
-        strCaption += caption; // Use supplied caption
+        strCaption += caption; // Use supplied caption (can be empty)
     }
 
-    printf("%s: %s\n", caption.c_str(), message.c_str());
+    printf("%s: %s\n", strCaption.c_str(), message.c_str());
     fprintf(stderr, "%s: %s\n", strCaption.c_str(), message.c_str());
     return 4;
 }
@@ -37,9 +37,15 @@ static bool noui_ThreadSafeAskFee(int64 /*nFeeRequired*/)
     return true;
 }
 
+static void noui_InitMessage(const std::string &message)
+{
+    printf("init message: %s\n", message.c_str());
+}
+
 void noui_connect()
 {
     // Connect bitcoind signal handlers
     uiInterface.ThreadSafeMessageBox.connect(noui_ThreadSafeMessageBox);
     uiInterface.ThreadSafeAskFee.connect(noui_ThreadSafeAskFee);
+    uiInterface.InitMessage.connect(noui_InitMessage);
 }

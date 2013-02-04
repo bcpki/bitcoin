@@ -546,8 +546,9 @@ Value sendrawtransaction(const Array& params, bool fHelp)
         fHave = view.GetCoins(hashTx, existingCoins);
         if (!fHave) {
             // push to local node
-            if (!tx.AcceptToMemoryPool())
-                throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "TX rejected");
+            CValidationState state;
+            if (!tx.AcceptToMemoryPool(state, true, false))
+                throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "TX rejected"); // TODO: report validation state
         }
     }
     if (fHave) {
@@ -558,7 +559,7 @@ Value sendrawtransaction(const Array& params, bool fHelp)
     } else {
         SyncWithWallets(hashTx, tx, NULL, true);
     }
-    RelayMessage(CInv(MSG_TX, hashTx), tx);
+    RelayTransaction(tx, hashTx);
 
     return hashTx.GetHex();
 }
