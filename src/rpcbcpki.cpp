@@ -51,17 +51,19 @@ pubkey_type rpc_buildtype(const string& name) {
   return type;
 }
 
-vector<vector<unsigned char> > CoinValues(const CCoins coins) {
-  vector<vector<unsigned char> > values;
+vector<pair<unsigned int,vector<unsigned char> > > CoinValues(const CCoins coins) {
+  vector<pair<unsigned int,vector<unsigned char> > > values;
+  unsigned int i = 0;
   BOOST_FOREACH(const CTxOut &out, coins.vout) {
     txnouttype typeRet = TX_NONSTANDARD;
     vector<vector<unsigned char> > vSolutions;
+    i++;
     if (!Solver(out.scriptPubKey, typeRet, vSolutions))
       continue;
     if (typeRet != TX_MULTISIG)
       continue;
     if (out.nValue >= BCPKI_MINAMOUNT)
-      values.push_back(vSolutions[1]);
+      values.push_back(make_pair(i-1,vSolutions[1]));
   }
   return values;
 }
@@ -79,11 +81,16 @@ void rpc_addtxid(const uint256 txid, Object& result, bool fValues = false) {
   CBlockIndex *pindex = FindBlockByHeight(coins.nHeight);
   result.push_back(Pair("strTime", DateTimeStrFormat("%Y-%m-%dT%H:%M:%S", pindex->nTime).c_str()));
   if (fValues) {
-    vector<vector<unsigned char> > values = CoinValues(coins);
-    BOOST_FOREACH(vector<unsigned char> val, values) {
-      uint160 hash = Hash160(val);
-      result.push_back(Pair("value", HexStr(hash.begin(),hash.end())));
+    vector<pair<unsigned int, vector<unsigned char> > > values = CoinValues(coins);
+    Array entries;
+    BOOST_FOREACH(const PAIRTYPE(unsigned int, vector<unsigned char>) val, values) {
+      Object obj;
+      uint160 hash = Hash160(val.second);
+      obj.push_back(Pair("vout", (int)val.first));
+      obj.push_back(Pair("value", HexStr(hash.begin(),hash.end())));
+      entries.push_back(obj);
     }
+    result.push_back(Pair("values", entries));
   }
 }
 
@@ -698,6 +705,13 @@ Value sendtoalias(const Array& params, bool fHelp)
     if (JSONverbose > 0) result.push_back(Pair("nConfirmations",nConfirmations));
     result.push_back(Pair("dest",CBitcoinAddress(dest).ToString()));
     result.push_back(Pair("txid", wtx.GetHash().GetHex()));
+    int i = 0;
+    BOOST_FOREACH(CTxOut out, wtx.vout) {
+      CTxDestination tmpdest;
+      if (ExtractDestination(out.scriptPubKey,tmpdest) && (tmpdest == dest))
+	result.push_back(Pair("vout", i));
+      i++;
+    }
 
     return result;
 }
@@ -787,6 +801,7 @@ bool rpc_addderivedkey(const CPubKey pubkey, const vector<unsigned char> ticket,
   if (fNew)
     pwalletMain->SetAddressBookName(pubkey.GetID(), "basekeystore");
   else {
+    ;
     if (!pwalletMain->HaveKey(keyRet.GetPubKey().GetID())) 
       if (!pwalletMain->AddKey(keyRet)) // CAUTION: AddKey cannot add pure pubkeys?
 	throw JSONRPCError(RPC_WALLET_ERROR, "Error adding derived key to wallet");
