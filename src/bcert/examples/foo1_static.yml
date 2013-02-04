@@ -1,0 +1,13 @@
+data:
+  version: 0.1
+  subjectname: Foo Inc.
+  contacts: 
+   - type: EMAIL
+     value: contact@foo.com 
+   - type: URL  
+     value: "http://foo.com"
+  paymentkeys:
+    - algorithm:
+       type: STATIC_BTCADDR
+      value: [ mrMyF68x19kAc2byGKqR9MLfdAe1t5MPzh ]
+---
