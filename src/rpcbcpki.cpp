@@ -73,13 +73,29 @@ void rpc_addtxid(const uint256 txid, Object& result, bool fValues = false) {
   CBlockIndex *pindex = FindBlockByHeight(coins.nHeight);
   result.push_back(Pair("strTime", DateTimeStrFormat("%Y-%m-%dT%H:%M:%S", pindex->nTime).c_str()));
   if (fValues) {
-    vector<pair<unsigned int, vector<unsigned char> > > values = CoinValues(coins);
+    vector<pair<unsigned int,vector<unsigned char> > > values;
+    int i = 0;
     Array entries;
-    BOOST_FOREACH(const PAIRTYPE(unsigned int, vector<unsigned char>) val, values) {
+    BOOST_FOREACH(const CTxOut &out, coins.vout) {
+      txnouttype typeRet = TX_NONSTANDARD;
+      vector<vector<unsigned char> > vSolutions;
+      i++;
+      if (!Solver(out.scriptPubKey, typeRet, vSolutions))
+	continue;
+      if (typeRet != TX_MULTISIG)
+	continue;
+      if (out.nValue < BCPKI_MINAMOUNT)
+	continue;
+      //	values.push_back(make_pair(i-1,vSolutions[1]));
       Object obj;
-      uint160 hash = Hash160(val.second);
-      obj.push_back(Pair("vout", (int)val.first));
+      uint160 hash = Hash160(vSolutions[1]);
+      obj.push_back(Pair("vout", i-1));
       obj.push_back(Pair("value", HexStr(hash.begin(),hash.end())));
+      obj.push_back(Pair("ownersReq", vSolutions.front()[0]-1));
+      //      obj.push_back(Pair("scriptPubKey", out.scriptPubKey.ToString() ));
+      obj.push_back(Pair("amount", ValueFromAmount(out.nValue)));
+      for(unsigned int j=2; j<vSolutions.size()-1; j++)  
+	obj.push_back(Pair("owner", HexStr(vSolutions[j])));
       entries.push_back(obj);
     }
     result.push_back(Pair("values", entries));
@@ -494,6 +510,8 @@ Value bcsigncert(const Array& params, bool fHelp)
       throw runtime_error(msg);
     }
 
+  rpc_testnetonly();
+
   // parse first argument
   CAlias alias;
   vector<CPubKey> owners; // empty
@@ -524,7 +542,7 @@ Value bcsigncert(const Array& params, bool fHelp)
   CWalletTx wtx;
   Value bcsignresult = rpc_bcsign(values,nReq,nOwners,owners,wtx);
   bcsignresult.get_obj().push_back(Pair("fname",alias.GetPubKeyIDHex()));
-  if (JSONverbose > 0) result.push_back(Pair("bcsignresult", bcsignresult));
+  result.push_back(Pair("bcsignresult", bcsignresult));
 
   // additional wallet comments
   wtx.mapValue["signature"] = alias.GetName();
@@ -558,12 +576,13 @@ Value sendtoalias(const Array& params, bool fHelp)
             "<amount> is a real and is rounded to the nearest 0.00000001"
             + HelpRequiringPassphrase());
 
+    rpc_testnetonly();
+
     // Minimum confirmations
     int nMinDepth = 6;
     if (params.size() > 3)
         nMinDepth = params[3].get_int();
 
-    rpc_testnetonly();
     CAlias alias = rpc_buildalias(params[0].get_str());
     int64 nAmount = AmountFromValue(params[2]);
 
@@ -671,6 +690,8 @@ Value spendoutpoint(const Array& params, bool fHelp)
         throw runtime_error(
             "spendoutpoint <txid> <n>\n"
 	    "spends the n-th output of txid to a change address.\n");
+
+    rpc_testnetonly();
 
     RPCTypeCheck(params, list_of(str_type)(int_type));
 

@@ -28,9 +28,9 @@ continue as usual
 make -f makefile.unix 
 ```
 
-## New RPCs (rpcbcpki.cpp)
+## New RPCs (see rpcbcpki.cpp)
 
-### basic use (appear in wiki examples)
+### basic use (RPCs that appear in wiki examples)
 
 don't access blockchain:
 - aliasdump : output all values associated with an alias name (normalization,hash,privkey,address,etc.)
@@ -40,15 +40,20 @@ access blockchain:
 - bcverify : verify arbitrary signatures for a given alias, in particular verify certificates
 - bclist : list all signature values for a given alias
 
-commit transaction:
+commit transaction (testnet only):
 - bcsigncert : sign a given certificate under a given alias name 
 
 - sendtoalias : send money directly to alias (certificate must be available locally)
     this can handle various methods such as static bitcoin address, pay-to-contract with single or multiple basekeys. 
 - spendoutpoint : spends a given outpoint (txid,vout) to a self-owned address 
 
-### extended use (does not appear in wiki examples)
+### extended use (RPC that does not appear in wiki examples)
+
+commit transaction (testnet only):
 - bcsign : sign given values under a given alias name 
+
+If you want to use the RPCs bcsigncert, sendtoalias, spendoutpoint and bcsign on the mainnet then you have to
+uncomment the calls to rpc_testnetonly() throughout rpcbcpki.cpp.
 
 ### deprecated
 
@@ -112,7 +117,16 @@ TODO:
  - CKey GetDerivedKey(std::vector<unsigned char> ticket) const;
  - key.cpp depends on bignum.h
 
+### wallet.cpp .h:
+ - CWallet::SelectCoinsMinConf
+ - CWallet::SelectCoins
+ setting fClear to false these functions now build upon the set of pre-selected coins that is passed as setCoinsRet and proceed as before, i.e. select more coins as required and a change address if required.
+
 ## Useful Links
 
+#### Hash/Conversion tools
  - http://www.fileformat.info/tool/hash.htm
  - http://gobittest.appspot.com/Address
+
+#### Papers
+ - [Homomorphic Payment Addresses and the Pay-to-Contract Protocol](http://arxiv.org/pdf/1212.3257)
