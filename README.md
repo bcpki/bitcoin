@@ -68,13 +68,8 @@ library:
 - e.py : conversion function between secrets, EC points, pubkeys, ids and bitcoin addresses
 
 command line tools:
-- mkcert.py : generate binary protobuf certificates (e.g. parse yaml)
-- dumpcert.py : convert binary protobuf certificate to various forms (pretty-print, ascii armored, yaml, etc.)
-- dumpcertstore.py : wrapper around dumpcert.py that takes alias name and looks up binary cert from local store 
-
-TODO:
-- join dumpcertstore.py with dumpcert.py
-- also need up/download.py with cert server access
+- mkbcrt.py : generate binary protobuf certificates from yaml
+- dumpbcrt.py : convert binary protobuf certificate to various forms (pretty-print, ascii armored, hexdump, hash digest, etc.)
 
 ## Changes
 
@@ -113,9 +108,8 @@ TODO:
  unchanged?
 
 ### key.cpp .h:
- - CKey::SetSecretByNumber(uint256 num); 
+ - CKey::SetSecret(vector<unsigned int>) overloaded
  - CKey GetDerivedKey(std::vector<unsigned char> ticket) const;
- - key.cpp depends on bignum.h
 
 ### wallet.cpp .h:
  - CWallet::SelectCoinsMinConf
