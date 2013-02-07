@@ -3,11 +3,10 @@ data:
   subjectname: Foo Inc.
   contacts: 
    - type: EMAIL
-     value: contact@foo.com 
+     value: foo@fooinc.com
    - type: URL  
-     value: "http://foo.com"
+     value: "http://www.fooinc.com"
   paymentkeys:
     - algorithm:
        type: STATIC_BTCADDR
       value: [ mrMyF68x19kAc2byGKqR9MLfdAe1t5MPzh ]
----

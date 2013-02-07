@@ -7,10 +7,9 @@ data:
    - type: EMAIL
      value: B@fooproject.com 
    - type: URL  
-     value: "http://fooproject.com"
+     value: "http://www.fooproject.com"
   paymentkeys:
     - algorithm:
        type: P2CMULTI
        version: 0.1
       value: [ 2, 0285b2eb2c0f2e4a12646dbcf38d08c29ef557b5616048575b133a2084a56bb84a, 03ba3137ddbee4e164390b7b67e0975d12969ef23ac1fd7b1f7e880319d072b323 ]
---- 

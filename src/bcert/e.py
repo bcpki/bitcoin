@@ -16,18 +16,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-from ecdsa import ellipticcurve
+from ecdsa import ellipticcurve, numbertheory
 from ecdsa import numbertheory
 from ecdsa import ecdsa
 from ecdsa import util
-import bitcoin # from electrum code, contains base58 encode and others
-from hashlib import sha256 # will probably need this too
-from bitcoin import hash_160
-from mycert2 import *
-import binascii
-
-versno="0.4"
-basedir="/web/btcrypt.org/public_html/certs/"
+import binascii, string, bitcoin # from electrum code, contains base58 encode and others
 
 # ----- testnet / mainnet -----
 
@@ -88,9 +81,9 @@ def point2pubkey(p):
 def point2pubkeyx(p):
   return tohex(point2pubkey(p))
 def point2id(p):
-  return hash_160(point2pubkey(p))
+  return bitcoin.hash_160(point2pubkey(p))
 def point2idx(p):
-  return tohex(hash_160(point2pubkey(p)))
+  return tohex(bitcoin.hash_160(point2pubkey(p)))
 def point2addr(p):
   return bitcoin.public_key_to_bc_address(point2pubkey(p))
 
@@ -106,7 +99,7 @@ def pubkey2point(pubkey):
 def pubkey2addr(pubkey): 
   return bitcoin.public_key_to_bc_address(toraw(pubkey))
 def pubkey2id(pubkey): 
-  return hash_160(toraw(pubkey))
+  return bitcoin.hash_160(toraw(pubkey))
 def pubkey2idx(pubkey): 
   return tohex(pubkey2id(pubkey))
 
@@ -121,8 +114,11 @@ def addr2idx(addr):
   return tohex(bitcoin.bc_address_to_hash_160(addr))
 
 # little-endian binary value (e.g. hash)
+#def val2int(val):
+#  return int(tohex(toraw(val)[::-1]),16)
+# big-endian binary value (e.g. hash)
 def val2int(val):
-  return int(tohex(toraw(val)[::-1]),16)
+  return int(tohex(val),16)
 
 # derived pubkey  
 def derivepoint(P,hash):
@@ -161,137 +157,4 @@ def hash2idx(hexstr):
 
 def hash2addr(hexstr):
   return point2addr(derivepoint(Z,hexstr))
-
-# ----- aliases -----
-
-import re
-def isvalidalias(alias):
-  if not re.match("^[A-Za-z][A-Za-z0-9_-]*",alias):
-    return false
-  return re.match("^[A-Za-z0-9_-]*[A-Za-z0-9]",alias):
-
-def normst(instring):
-   instring=instring.upper().replace("-","").replace("_","").replace("O","0").replace("I","1").replace("L","1")
-   instring=re.sub(r'([A-Z0-9])\1+', r'\1',instring)
-   return instring
-
-def aliastofilename(alias,versionin):
-   normalias="BCSIG_v"+str(versionin)+"_"+normst(alias)
-   return hash2idx(hash_160(normalias))
-
-# ----- print -----
-
-def printfile(filename):
-   ff=open(filename,'r')
-   for line in ff:
-      print line.rstrip()
-   ff.close();
-
-def printcert(cert,outtype):
-   try: 
-      alias=cert.signatures[0].value
-      versno=cert.signatures[0].algorithm.version
-   except:
-      alias=""
-   if alias is not "":
-      certfilename=aliastofilename(alias,versno)
-   else: 
-      certfilename="tmpfile" 
-   afile="/web/btcrypt.org/public_html/certs/"+certfilename+".acrt"
-   bfile="/web/btcrypt.org/public_html/certs/"+certfilename+".bcrt"
-   f=open(bfile,'wb')
-   f.write(cert.SerializeToString())
-   f.close()
-   asciicert=CertToAscii(cert)
-   f=open(afile,'wb')
-   f.write(asciicert)
-   f.close()
-   if outtype is "bincert":
-      filename=certfilename
-      # print "Content-type:application/octet-stream"
-      print "Content-Disposition: attachment; filename="+filename+".bcrt"
-      print "Content-type:text/plain\r\n\r"
-      out=cert.SerializeToString()
-      # print cert.SerializeToString()
-      import sys
-      sys.stdout.write(out.rstrip("\n"))
-   elif outtype is "asciicert":
-      print "Content-type:text/plain\r\n\r"
-      print asciicert.rstrip('\n')
-   else:
-      print "Content-type:text/html\r\n\r\n"
-      header="../public_html/header.php"
-      footer="../public_html/footer.php"
-      baseurl="http://btcrypt.org/"
-      printfile(header)
-      if alias is not "":
-         normalias="BCSIG_v"+str(versno)+"_"+normst(alias)
-         hashvalue=hash_160(normalias).encode('hex')
-         pubkeyval=hash2pubkey(hashvalue)
-         h160pubkey=hash_160(pubkeyval.decode('hex')).encode('hex')
-         print "normalized alias: "+normalias+"<p>"
-         print "hashed, normalize ALIAS: "+str(hashvalue)+"<p>"
-         print "hashed, normalize alias, multiplied with basepoint: "+str(pubkeyval)
-         print "Filename, which will be generated: "+str(h160pubkey)
-      print "<p>Binary Encoded saved as: <A HREF=\""+baseurl+"certs/"+certfilename+".bcrt\">/certs/"+certfilename+".bcrt</A></p>"
-      print "Simply check here: <A HREF=\""+baseurl+"cgi-bin/decode.cgi?fname="+certfilename+".bcrt\">/certs/"+certfilename+".bcrt</A></p>"
-      print "<PRE>"
-      print asciicert.rstrip('\n')
-      print "</PRE>"
-      print "<p>ASCII Encoded saved as: <A HREF=\""+baseurl+"certs/"+certfilename+".acrt\">/certs/"+certfilename+".acrt</A></p>"
-      print "Check in the certificate here:"
-      print "<p><form action=\""+baseurl+"cgi-bin/upload.cgi\" method=\"get\"><input type=\"hidden\" name=\"cert\" value=\""+certfilename+"\">"
-      print "<p><button type=\"submit\" class=\"btn\">Upload certificate</button></p></form>"
-      print "<H2>End of output</H2>"
-      printfile(footer)
-
-# ----- yaml -----
-      
-def getyaml(yamlin):
-    import yaml
-    yml=yaml.load(yamlin)
-    ver=yml['data']['version']
-    subject=yml['data']['subjectname']
-    contacts=[]
-    for i in yml['data']['contacts']:
-        contacts+=[[i['type'],i['value']]]
-    ty=yml['data']['paymentkeys'][0]['algorithm']['type']
-    pubkeys=[]
-    for i in yml['data']['paymentkeys']:
-        pubkeys+=i['value']
-    try:
-        alias=yml['signature']['value']
-    except:
-        alias=""
-    return ver,subject,contacts,ty,pubkeys,alias
-
-# ----- html -----
-
-def gethtml(inlist):
-   import cgi, cgitb 
-   import re
-   form = cgi.FieldStorage()
-   for i in inlist:
-      try: 
-         value=re.sub(r'[^a-zA-Z0-9_\n\r :\-@/,\.\"\{\}\[\]=]\+', '',form.getvalue(i))
-      except:
-         value=""
-      globals()[i] = value
-
-# ----- ascii -----
-
-def getascii(asc):
-   import re
-   stripped1=asc.split("\r\n\r\n")[1].split("=")[0][:-1]
-   stripped2=re.sub(r'\r\n','\n',stripped1)[:-1]
-   bina=binascii.a2b_base64(stripped2)
-   return bina
-
-# def gethtml(inlist):
-#    import cgi, cgitb 
-#    import re
-#    form = cgi.FieldStorage()
-#    for i in inlist:
-#       value=re.sub(r'\W+', '',form.getvalue(i))
-#       globals()[i] = value
 

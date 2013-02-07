@@ -3,12 +3,11 @@ data:
   subjectname: Foo Inc.
   contacts: 
    - type: EMAIL
-     value: contact@foo.com 
+     value: foo@fooinc.com
    - type: URL  
-     value: "http://foo.com"
+     value: "http://www.fooinc.com"
   paymentkeys:
     - algorithm:
        type: P2CSINGLE
        version: 0.1
       value: [ 02537af4f00677d5f13916618f865abcac79a51e485ad0da26aab2532f499af376 ]
----
