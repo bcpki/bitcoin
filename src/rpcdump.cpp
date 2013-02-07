@@ -53,8 +53,9 @@ Value importprivkey(const Array& params, bool fHelp)
     CKey key;
     if (IsHex(strSecret)) { // hex encoded secret
       vector<unsigned char> vch = ParseHex(strSecret);
-      vch.resize(32);
-      key.SetSecretByNumber(uint256(vch));
+      // BIGENDIAN
+      //      vch.resize(32);
+      key.SetSecret(vch);
     } else {
       CBitcoinSecret vchSecret;
       if (!vchSecret.SetString(strSecret))

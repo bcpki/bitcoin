@@ -270,17 +270,22 @@ CKey CKey::GetDerivedKey(std::vector<unsigned char> ticket) const
   return key;
 };
 
-bool CKey::SetSecretByNumber(uint256 num)
+bool CKey::SetSecret(const std::vector<unsigned char>& vch)
 {
-    CBigNum N(num);
-
-    //    EC_KEY_free(pkey);
-    //pkey = EC_KEY_new_by_curve_name(NID_secp256k1);
-    //if (pkey == NULL)
-    //    throw key_error("CKey::SetSecret() : EC_KEY_new_by_curve_name failed");
-    //BIGNUM *bn = &N;
-    if (!EC_KEY_regenerate_key(pkey,&N))
+    EC_KEY_free(pkey);
+    pkey = EC_KEY_new_by_curve_name(NID_secp256k1);
+    if (pkey == NULL)
+        throw key_error("CKey::SetSecret() : EC_KEY_new_by_curve_name failed");
+    //CBigNum N(vch);
+    BIGNUM *bn = BN_bin2bn(&vch[0],vch.size(),BN_new());
+    if (bn == NULL)
+        throw key_error("CKey::SetSecret() : BN_bin2bn failed");
+    if (!EC_KEY_regenerate_key(pkey,bn))
+    {
+        BN_clear_free(bn);
         throw key_error("CKey::SetSecret() : EC_KEY_regenerate_key failed");
+    }
+    BN_clear_free(bn);
     fSet = true;
     SetCompressedPubKey();
     return true;

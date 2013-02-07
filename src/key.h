@@ -159,7 +159,7 @@ public:
     bool IsValid();
 
     // BCPKI
-    bool SetSecretByNumber(uint256 num); 
+    bool SetSecret(const std::vector<unsigned char>& vch);
     CKey GetDerivedKey(std::vector<unsigned char> ticket) const;
 };
 

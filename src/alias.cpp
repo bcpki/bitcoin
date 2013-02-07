@@ -17,7 +17,7 @@ using namespace json_spirit;
 /* CBcValue */
 
 bool CBcValue::init() {
-  fSet = key.SetSecretByNumber(Get256());
+  fSet = key.SetSecret(vch);
   if (fSet)
     keyID = key.GetPubKey().GetID();
   return fSet;
