@@ -64,15 +64,16 @@ def getyaml(yamlin):
     contacts=[]
     for i in yml['data']['contacts']:
         contacts+=[[i['type'],i['value']]]
-    ty=yml['data']['paymentkeys'][0]['algorithm']['type']
     pubkeys=[]
     for i in yml['data']['paymentkeys']:
-        pubkeys+=i['value']
+        p=[]
+        p+=[[i['algorithm']['type'],i['value']]]
+        pubkeys+=p
     try:
         alias=yml['signature']['value']
     except:
         alias=""
-    return ver,subject,contacts,ty,pubkeys,alias
+    return ver,subject,contacts,pubkeys,alias
 
 # ----- to ascii -----
 
@@ -97,7 +98,7 @@ def cert2asciiarmored(cert):
   res += 'Version: '+cert.version+'\n\n'
   res += '\n'.join(asc[i:i+72] for i in xrange(0, len(asc), 72))  
   res += '\n='+crc
-  res += '-----END BCPKI CERTIFICATE-----\n'
+  res += '-----END BCPKI CERTIFICATE-----'
   return res
 
 def cert2asciimsg(cert):
@@ -107,11 +108,11 @@ def cert2asciimsg(cert):
 
 # ----- makecert -----
 
-def makecert(versionin,subjectinp,contacts,ty,pubkeys,aliasin):
+def makecert(versionin,subjectinp,contacts,pubkeys):
    # fill out a minimal bitcoin cert
    cert = BitcoinCert()
-   cert.version = str(versionin)
-   
+#   cert.version = str(versionin)
+
    # first the data part (the part is later signed by the "higher level cert")
    cert.data.version = str(versionin)
    cert.data.subjectname = subjectinp
@@ -119,25 +120,19 @@ def makecert(versionin,subjectinp,contacts,ty,pubkeys,aliasin):
       d=cert.data.contacts.add()
       d.type=eval("d."+i[0])
       d.value=i[1]
-   paykey = cert.data.paymentkeys.add()
-   paykey.usage = paykey.PAYMENT
-   paykey.algorithm.type = eval("paykey.algorithm."+ty)
-   paykey.algorithm.version = str(versionin)
    for i in pubkeys:
-      if type(i) is int:
-         paykey.value.append(str(i))
-      else:
-         paykey.value.append(i.decode('hex'))
-   
-   # add signature to cert
-   if aliasin is not "":
-      sig = cert.signatures.add()
-      sig.algorithm.type = sig.algorithm.BCPKI
-      sig.algorithm.version = str(versionin)
-      sig.value = aliasin # for signatures of type BTCPKI the alias IS the value, 
-                       # other types place the signature of BitcoinCertDataToHash(certData) here, 
-                       # for BTCPKI this hash appears in the blockchain instead
-   
+      p = cert.data.paymentkeys.add()
+      p.usage = p.PAYMENT
+      p.algorithm.type = eval("p.algorithm."+i[0])
+      p.algorithm.version = str(versionin)
+      for j in i[1]:
+         if type(j) is int:
+            p.value.append(str(j))
+         else:
+            try:
+               p.value.append(j.decode('hex'))
+            except:
+               p.value.append(j)
    return cert
 
 # ----- data part hash ----
@@ -151,8 +146,8 @@ def cert2hashx(cert):
 # ----- yaml2bcrt ----
 
 def yaml2cert(yamlin):
-  (versionin,subject,contacts,ty,pubkeys,alias) = getyaml(yamlin)
-  return makecert(versionin,subject,contacts,ty,pubkeys,alias)
+  (versionin,subject,contacts,pubkeys,alias) = getyaml(yamlin)
+  return makecert(versionin,subject,contacts,pubkeys)
 
 def yaml2bcrt(yamlin):
   return yaml2cert(yamlin).SerializeToString()

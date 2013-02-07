@@ -90,7 +90,7 @@ void rpc_addtxid(const uint256 txid, Object& result, bool fValues = false) {
       Object obj;
       uint160 hash = Hash160(vSolutions[1]);
       obj.push_back(Pair("vout", i-1));
-      obj.push_back(Pair("value", HexStr(hash.begin(),hash.end())));
+      obj.push_back(Pair("id", HexStr(hash.begin(),hash.end())));
       obj.push_back(Pair("ownersReq", vSolutions.front()[0]-1));
       //      obj.push_back(Pair("scriptPubKey", out.scriptPubKey.ToString() ));
       obj.push_back(Pair("amount", ValueFromAmount(out.nValue)));
@@ -270,7 +270,7 @@ bool rpc_parsealiasobject(const string argStr, CAlias& alias, unsigned int& nReq
 	}
       }
     }
-    result.push_back(Pair("externalowners",ownerArray));
+    if (JSONverbose > 0) result.push_back(Pair("externalowners",ownerArray));
   }
   return true;
 }
@@ -632,6 +632,7 @@ Value sendtoalias(const Array& params, bool fHelp)
       CKey baseKey;
       baseKey.SetPubKey(base);
       dest = baseKey.GetDerivedKey(vch).GetPubKey().GetID();
+      wtx.mapValue["to"] += CBitcoinAddress(dest).ToString();
       }
       break;
     case 2: // P2CMULTI
@@ -723,7 +724,6 @@ Value spendoutpoint(const Array& params, bool fHelp)
       throw JSONRPCError(RPC_WALLET_ERROR, "Transaction creation failed");
     result.push_back(Pair("nFee", ValueFromAmount(nFeeRequired)));
     if (JSONverbose > 0) result.push_back(Pair("changeKey", PubKeyToJSON(keyChange.GetReservedKey())));
-    return result;
 
     // commit
     if (!pwalletMain->CommitTransaction(wtx, keyChange))
@@ -896,8 +896,7 @@ Value importticket(const Array& params, bool fHelp)
     // derive destination
     CTxDestination derived = boost::apply_visitor(CTicketVisitor(ticket), base);
 
-    if (JSONverbose > 0) 
-      result.push_back(Pair("derived",CBitcoinAddress(derived).ToString()));
+    result.push_back(Pair("derived",CBitcoinAddress(derived).ToString()));
 
     {
       // TODO what about lock above?

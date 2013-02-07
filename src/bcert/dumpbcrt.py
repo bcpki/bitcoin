@@ -16,12 +16,34 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-import sys
+import sys, getopt, os
 from bcert import *
 
-bcrt = open(sys.argv[1]).read()
+# default
+ascii = data = binhex = store = filename = False
+pretty = True
 
-print bcrt2cert(bcrt) # pretty print
-print bcrt2asciiarmored(bcrt) # output ascii
-print "hash of data part is: " + bcrt2hashx(bcrt)
-print "hex binary cert: " + bcrt.encode('hex')
+optlist,args = getopt.getopt(sys.argv[1:],'adxsf')
+
+for (k,v) in optlist:
+  if k in ["-a","-d","-x","-f"]:
+    pretty = False
+  if   k == "-a": ascii = True 
+  elif k == "-d": data = True
+  elif k == "-x": binhex = True
+  elif k == "-s": store = True
+  elif k == "-f": filename = True
+
+if store:
+  idx = alias2idx(args[0])
+  fname = os.path.expanduser('~/.bitcoin/testnet3/bcerts/'+idx+'.bcrt')
+  if filename: print idx 
+else:
+  fname = args[0]
+  
+bcrt = open(fname).read()
+
+if pretty: print bcrt2cert(bcrt) 
+if ascii: print bcrt2asciiarmored(bcrt) 
+if data: print bcrt2hashx(bcrt)
+if binhex: print bcrt.encode('hex')

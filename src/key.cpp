@@ -211,9 +211,7 @@ bool CKey::SetPrivKey(const CPrivKey& vchPrivKey)
 // BCPKI
 CKey CKey::GetDerivedKey(std::vector<unsigned char> ticket) const
 {
-  ticket.resize(32);
-  uint256 ticket256(ticket);
-  CBigNum bn(ticket256);
+  BIGNUM *bn = BN_bin2bn(&ticket[0],ticket.size(),BN_new());
 
   BN_CTX *ctx = NULL;
   if ((ctx = BN_CTX_new()) == NULL)
@@ -231,11 +229,11 @@ CKey CKey::GetDerivedKey(std::vector<unsigned char> ticket) const
       //order = BN_CTX_get(ctx);
       if (!EC_GROUP_get_order(EC_KEY_get0_group(pkey), order, ctx)) 
       	throw key_error("CKey::DeriveKey() : EC_GROUP_get_order failed");
-      if (!BN_mod_add(&bn, &bn, EC_KEY_get0_private_key(pkey), order, ctx))
+      if (!BN_mod_add(bn, bn, EC_KEY_get0_private_key(pkey), order, ctx))
       	throw key_error("CKey::DeriveKey() : BN_mod_add failed");
-      if (!EC_KEY_regenerate_key(key.pkey,&bn)) // sets private AND public key
-        throw key_error("CKey::SetSecret() : EC_KEY_regenerate_key failed");
-      //      if (!EC_KEY_set_private_key(key.pkey, &bn)) 
+      if (!EC_KEY_regenerate_key(key.pkey,bn)) // sets private AND public key
+        throw key_error("CKey::DeriveKey() : EC_KEY_regenerate_key failed");
+      //      if (!EC_KEY_set_private_key(key.pkey, bn)) 
       //  throw key_error("CKey::DeriveKey() : EC_KEY_set_private_key failed");
       if (!EC_KEY_check_key(key.pkey))
 	throw key_error("CKey::DeriveKey() : EC_KEY_check_key failed");
@@ -250,7 +248,7 @@ CKey CKey::GetDerivedKey(std::vector<unsigned char> ticket) const
       if (pub_key == NULL)
         throw key_error("CKey::DeriveKey() : EC_POINT_new failed");
 
-      if (!EC_POINT_mul(group, pub_key, &bn, NULL, NULL, ctx))
+      if (!EC_POINT_mul(group, pub_key, bn, NULL, NULL, ctx))
         throw key_error("CKey::DeriveKey() : EC_POINT_mul failed");
       // end snippet from EC_KEY_regenerate_key
       // now pub_key = ticket * basepoint
@@ -276,7 +274,6 @@ bool CKey::SetSecret(const std::vector<unsigned char>& vch)
     pkey = EC_KEY_new_by_curve_name(NID_secp256k1);
     if (pkey == NULL)
         throw key_error("CKey::SetSecret() : EC_KEY_new_by_curve_name failed");
-    //CBigNum N(vch);
     BIGNUM *bn = BN_bin2bn(&vch[0],vch.size(),BN_new());
     if (bn == NULL)
         throw key_error("CKey::SetSecret() : BN_bin2bn failed");
