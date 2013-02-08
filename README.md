@@ -3,19 +3,21 @@
 ## Goal
 
 The goal of the BCPKI-project (blockchain-PKI) is to establish a root CA inside the blockchain.
-What has been done here
 
 ## What has been done
 
 First, we have drafted a quite general specification for bitcoin certificates (protobuf messages) that allow for a variety of payment protocols (e.g. static as well as customer-side-generated payment addresses). This part has surely been done elsewhere as well and is orthogonal to the goal of this project. What is new here is the signatures under the certificates.
 
 We have patched the bitcoind to handle certificates, submit signatures to the blockchain, verify certificates against the blockchain, and pay to addresses contained in the blockchain.
+Signatures in the blockchain are stored entirely in the UTXO set (i.e. the unspend, unprunable outputs). 
+This seems to make signature lookup and verification reasonably fast: 
+it took us 10s in the single mainnet test we performed, and is instant on the testnet.
 
 Details can be found below and in the wiki.
 
 ## Build
 
-install protobuf
+install protobuf:
 ```
 apt-get install libprotobuf-dev python-protobuf
 cd src/bcert
@@ -23,16 +25,25 @@ cd src/bcert
 cd ..
 ln -s bcert.pb.cc bcert.pb.cpp
 ```
-continue as usual
+continue as usual:
 ```
 make -f makefile.unix 
+```
+create directory for binary certificates:
+```
+mk ~/.bitcoin/testnet3/bcerts
+mk ~/.bitcoin/bcerts
+```
+the python command line tools require:
+```
+pip install ecdsa
 ```
 
 ## New RPCs (see rpcbcpki.cpp)
 
 ### basic use (RPCs that appear in wiki examples)
 
-don't access blockchain:
+do not access blockchain:
 - aliasdump : output all values associated with an alias name (normalization,hash,privkey,address,etc.)
 - importticket : import derived keys from a given base address and a given ticket number (pay-to-contract)
 
@@ -65,7 +76,8 @@ uncomment the calls to rpc_testnetonly() throughout rpcbcpki.cpp.
 under src/bcert
 
 library:
-- e.py : conversion function between secrets, EC points, pubkeys, ids and bitcoin addresses
+- e.py : conversion functions between secrets, EC points, pubkeys, ids and bitcoin addresses
+- bcert.py : wrapper around bcert_pb2.py, parsers/conversion functions for certificates (binary, ascii, hexdump, yaml, etc.)
 
 command line tools:
 - mkbcrt.py : generate binary protobuf certificates from yaml
@@ -115,6 +127,17 @@ command line tools:
  - CWallet::SelectCoinsMinConf
  - CWallet::SelectCoins
  setting fClear to false these functions now build upon the set of pre-selected coins that is passed as setCoinsRet and proceed as before, i.e. select more coins as required and a change address if required.
+
+## New Files
+
+ - alias.h .cpp
+ - bcert.h .cpp
+ - rpbcpki.cpp
+ - rpctojson.h .cpp
+
+The directory src/bcert contains the protobuf specification bcert.proto and the python command line tools.
+The latter build upon the file bitcoin.py from the electrum client.
+Everything in this subdirectory is GPLv3.
 
 ## Useful Links
 

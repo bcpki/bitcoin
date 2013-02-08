@@ -16,10 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-from ecdsa import ellipticcurve, numbertheory
-from ecdsa import numbertheory
-from ecdsa import ecdsa
-from ecdsa import util
+from ecdsa import ellipticcurve, numbertheory, ecdsa, util
 import binascii, string, bitcoin # from electrum code, contains base58 encode and others
 
 # ----- testnet / mainnet -----
