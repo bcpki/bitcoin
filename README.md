@@ -20,7 +20,7 @@ What is new here is the signatures _under_ the certificates.
 We have patched the bitcoind to handle certificates, submit signatures to the blockchain, verify certificates against the blockchain, pay directly to certificates (with various payment methods), revoke certificates.
 Signatures in the blockchain are stored entirely in the UTXO set (i.e. the unspend, unprunable outputs). 
 This seems to make signature lookup and verification reasonably fast: 
-it took us 10s in the mainnet test we performed, and is instant on the testnet.
+it took us 10s in the mainnet test we performed (lookup is instant on the testnet, of course).
 
 Payment methods include: static bitcoin addresses, client-side derived
 payment addresses (pay-to-contract), pay-to-contract with multisig destinations (P2SH)
@@ -98,6 +98,9 @@ command line tools:
 - mkbcrt.py : generate binary protobuf certificates from yaml
 - dumpbcrt.py : convert binary protobuf certificate to various forms (pretty-print, ascii armored, hexdump, hash digest, etc.)
 
+The python code builds upon the file bitcoin.py from the electrum client.
+Everything under src/bcert is GPLv3.
+
 ## Changes
 
 ### makefile.unix:
@@ -143,16 +146,13 @@ command line tools:
  - CWallet::SelectCoins
  setting fClear to false these functions now build upon the set of pre-selected coins that is passed as setCoinsRet and proceed as before, i.e. select more coins as required and a change address if required.
 
-## New Files
+### new files
 
  - alias.h .cpp
  - bcert.h .cpp
  - rpbcpki.cpp
  - rpctojson.h .cpp
-
-The directory src/bcert contains the protobuf specification bcert.proto and the python command line tools.
-The latter build upon the file bitcoin.py from the electrum client.
-Everything in this subdirectory is GPLv3.
+ - bcert/bcert.proto
 
 ## Useful Links
 
