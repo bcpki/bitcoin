@@ -2,18 +2,33 @@
 
 ## Goal
 
-The goal of the BCPKI-project (blockchain-PKI) is to establish a root CA inside the blockchain.
+The BCPKI-project (blockchain-PKI) establishes the blockchain as a _root CA_. 
+The goal is to allow a payment protocol to:
+- be all-bitcoin integrated
+- not rely on centralized CAs
+- allow for flexible certificates
 
-## What has been done
+BCPKI is not a payment protocol, but establishes a special kind of _root CA_ that payment protocols may decide to use.
+There may be other applications besides payment protocols.
 
-First, we have drafted a quite general specification for bitcoin certificates (protobuf messages) that allow for a variety of payment protocols (e.g. static as well as customer-side-generated payment addresses). This part has surely been done elsewhere as well and is orthogonal to the goal of this project. What is new here is the signatures under the certificates.
+## What has been done here
 
-We have patched the bitcoind to handle certificates, submit signatures to the blockchain, verify certificates against the blockchain, and pay to addresses contained in the blockchain.
+First, we have drafted a quite general specification for bitcoin certificates (protobuf messages) that allow for a variety of payment protocols (e.g. static as well as customer-side-generated payment addresses).
+This part has surely been done elsewhere as well and is orthogonal to the goal of this project.
+What is new here is the signatures _under_ the certificates.
+
+We have patched the bitcoind to handle certificates, submit signatures to the blockchain, verify certificates against the blockchain, pay directly to certificates (with various payment methods), revoke certificates.
 Signatures in the blockchain are stored entirely in the UTXO set (i.e. the unspend, unprunable outputs). 
 This seems to make signature lookup and verification reasonably fast: 
-it took us 10s in the single mainnet test we performed, and is instant on the testnet.
+it took us 10s in the mainnet test we performed, and is instant on the testnet.
 
-Details can be found below and in the wiki.
+Payment methods include: static bitcoin addresses, client-side derived
+payment addresses (pay-to-contract), pay-to-contract with multisig destinations (P2SH)
+
+Full-length real-world examples for all payment methods are provided in the tutorial pages.
+These examples have actually been carried out on testnet3.
+
+For further details and specifications see the wiki: [Technical](wiki/technical).
 
 ## Build
 
