@@ -5,11 +5,6 @@
 
 #include "main.h"
 #include "bitcoinrpc.h"
-//BCPKI
-//#include "alias.h" 
-//#include "bcert.h"  
-//temporary
-//#include <openssl/sha.h>
 
 using namespace json_spirit;
 using namespace std;
