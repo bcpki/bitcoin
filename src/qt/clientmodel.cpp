@@ -1,4 +1,5 @@
 #include "clientmodel.h"
+
 #include "guiconstants.h"
 #include "optionsmodel.h"
 #include "addresstablemodel.h"
@@ -6,6 +7,7 @@
 
 #include "alert.h"
 #include "main.h"
+#include "checkpoints.h"
 #include "ui_interface.h"
 
 #include <QDateTime>
@@ -52,6 +54,11 @@ QDateTime ClientModel::getLastBlockDate() const
         return QDateTime::fromTime_t(pindexBest->GetBlockTime());
     else
         return QDateTime::fromTime_t(1231006505); // Genesis block's time
+}
+
+double ClientModel::getVerificationProgress() const
+{
+    return Checkpoints::GuessVerificationProgress(pindexBest);
 }
 
 void ClientModel::updateTimer()

@@ -1,6 +1,9 @@
 /*
  * W.J. van der Laan 2011-2012
  */
+
+#include <QApplication>
+
 #include "bitcoingui.h"
 #include "clientmodel.h"
 #include "walletmodel.h"
@@ -9,12 +12,12 @@
 #include "guiconstants.h"
 #include "init.h"
 #include "ui_interface.h"
-#include "qtipcserver.h"
+#include "paymentserver.h"
 
-#include <QApplication>
 #include <QMessageBox>
 #include <QTextCodec>
 #include <QLocale>
+#include <QTimer>
 #include <QTranslator>
 #include <QSplashScreen>
 #include <QLibraryInfo>
@@ -34,23 +37,27 @@ Q_IMPORT_PLUGIN(qtaccessiblewidgets)
 static BitcoinGUI *guiref;
 static QSplashScreen *splashref;
 
-static void ThreadSafeMessageBox(const std::string& message, const std::string& caption, unsigned int style)
+static bool ThreadSafeMessageBox(const std::string& message, const std::string& caption, unsigned int style)
 {
     // Message from network thread
     if(guiref)
     {
         bool modal = (style & CClientUIInterface::MODAL);
+        bool ret = false;
         // In case of modal message, use blocking connection to wait for user to click a button
         QMetaObject::invokeMethod(guiref, "message",
                                    modal ? GUIUtil::blockingGUIThreadConnection() : Qt::QueuedConnection,
                                    Q_ARG(QString, QString::fromStdString(caption)),
                                    Q_ARG(QString, QString::fromStdString(message)),
-                                   Q_ARG(unsigned int, style));
+                                   Q_ARG(unsigned int, style),
+                                   Q_ARG(bool*, &ret));
+        return ret;
     }
     else
     {
         printf("%s: %s\n", caption.c_str(), message.c_str());
         fprintf(stderr, "%s: %s\n", caption.c_str(), message.c_str());
+        return false;
     }
 }
 
@@ -68,15 +75,6 @@ static bool ThreadSafeAskFee(int64 nFeeRequired)
                                Q_ARG(bool*, &payFee));
 
     return payFee;
-}
-
-static void ThreadSafeHandleURI(const std::string& strURI)
-{
-    if(!guiref)
-        return;
-
-    QMetaObject::invokeMethod(guiref, "handleURI", GUIUtil::blockingGUIThreadConnection(),
-                               Q_ARG(QString, QString::fromStdString(strURI)));
 }
 
 static void InitMessage(const std::string &message)
@@ -117,20 +115,18 @@ int main(int argc, char *argv[])
     // Command-line options take precedence:
     ParseParameters(argc, argv);
 
-    if(GetBoolArg("-testnet")) // Separate message queue name for testnet
-        strBitcoinURIQueueName = BITCOINURI_QUEUE_NAME_TESTNET;
-    else
-        strBitcoinURIQueueName = BITCOINURI_QUEUE_NAME_MAINNET;
-
-    // Do this early as we don't want to bother initializing if we are just calling IPC
-    ipcScanRelay(argc, argv);
-
     // Internal string conversion is all UTF-8
     QTextCodec::setCodecForTr(QTextCodec::codecForName("UTF-8"));
     QTextCodec::setCodecForCStrings(QTextCodec::codecForTr());
 
     Q_INIT_RESOURCE(bitcoin);
     QApplication app(argc, argv);
+
+    // Do this early as we don't want to bother initializing if we are just calling IPC
+    // ... but do it after creating app, so QCoreApplication::arguments is initialized:
+    if (PaymentServer::ipcSendCommandLine())
+        exit(0);
+    PaymentServer* paymentServer = new PaymentServer(&app);
 
     // Install global event filter that makes sure that long tooltips can be word-wrapped
     app.installEventFilter(new GUIUtil::ToolTipToRichTextFilter(TOOLTIP_WRAP_THRESHOLD, &app));
@@ -188,7 +184,6 @@ int main(int argc, char *argv[])
     // Subscribe to global signals from core
     uiInterface.ThreadSafeMessageBox.connect(ThreadSafeMessageBox);
     uiInterface.ThreadSafeAskFee.connect(ThreadSafeAskFee);
-    uiInterface.ThreadSafeHandleURI.connect(ThreadSafeHandleURI);
     uiInterface.InitMessage.connect(InitMessage);
     uiInterface.QueueShutdown.connect(QueueShutdown);
     uiInterface.Translate.connect(Translate);
@@ -237,7 +232,8 @@ int main(int argc, char *argv[])
                 WalletModel walletModel(pwalletMain, &optionsModel);
 
                 window.setClientModel(&clientModel);
-                window.setWalletModel(&walletModel);
+                window.addWallet("~Default", &walletModel);
+                window.setCurrentWallet("~Default");
 
                 // If -min option passed, start window minimized.
                 if(GetBoolArg("-min"))
@@ -249,14 +245,16 @@ int main(int argc, char *argv[])
                     window.show();
                 }
 
-                // Place this here as guiref has to be defined if we don't want to lose URIs
-                ipcInit(argc, argv);
+                // Now that initialization/startup is done, process any command-line
+                // bitcoin: URIs
+                QObject::connect(paymentServer, SIGNAL(receivedURI(QString)), &window, SLOT(handleURI(QString)));
+                QTimer::singleShot(100, paymentServer, SLOT(uiReady()));
 
                 app.exec();
 
                 window.hide();
                 window.setClientModel(0);
-                window.setWalletModel(0);
+                window.removeAllWallets();
                 guiref = 0;
             }
             // Shutdown the core and its threads, but don't exit Bitcoin-Qt here
