@@ -75,23 +75,13 @@ commit transaction (testnet only):
 
 ### extended use (RPC that does not appear in wiki examples)
 
-<<<<<<< HEAD
 commit transaction (testnet only):
 - bcsign : sign given values under a given alias name 
-=======
-    cd src; make -f makefile.unix test
->>>>>>> upstream/master
 
 If you want to use the RPCs bcsigncert, sendtoalias, spendoutpoint and bcsign on the mainnet then you have to
 uncomment the calls to rpc_testnetonly() throughout rpcbcpki.cpp.
 
-<<<<<<< HEAD
 ### deprecated
-=======
-    qmake BITCOIN_QT_TEST=1 -o Makefile.test bitcoin-qt.pro
-    make -f Makefile.test
-    ./bitcoin-qt_test
->>>>>>> upstream/master
 
 - aliasnew
 - aliasget
